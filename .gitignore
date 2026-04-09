@@ -1,0 +1,14 @@
+.env
+*.db
+token.json
+data/resume_versions/*.docx
+data/cover_letters/*.docx
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.venv/
+venv/
+dist/
+build/
+*.egg-info/
