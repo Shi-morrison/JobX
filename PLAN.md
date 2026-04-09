@@ -4,34 +4,96 @@
 A CLI-based AI agent suite that automates the entire software engineering job application process.
 Built with Python, Claude API, LangGraph, Playwright, and SQLite.
 
+---
+
+## Framework Explainers
+> Plain-English descriptions of every tool used in this project — no prior experience assumed.
+
+### Python
+The programming language the entire project is written in. Think of it as the glue holding everything together. Every file ends in `.py`.
+
+### Typer
+Turns Python functions into terminal commands. Without it, you'd have to write a lot of boilerplate to parse flags like `--job-id 5`. With it, you just write a normal function and decorate it with `@app.command()` — Typer handles the rest, including `--help` output automatically.
+
+### Pydantic + pydantic-settings
+Pydantic is a data validation library. If a function says it expects an integer and you give it a string, Pydantic catches it immediately with a clear error. `pydantic-settings` extends this to reading from `.env` files — so `config.py` can load `ANTHROPIC_API_KEY` from your `.env` and expose it as a typed Python attribute.
+
+### SQLite
+A database that lives in a single file (`data/jobs.db`) on your machine. No server, no account, no cost. Perfect for local tools. Think of it as a spreadsheet that your code can read and write to using structured queries.
+
+### SQLAlchemy
+A Python library that lets you talk to SQLite (and other databases) using Python classes instead of raw SQL. Instead of writing `INSERT INTO jobs (title, company) VALUES (...)`, you write `db.add(Job(title="...", company="..."))`. It also handles relationships — so `job.applications` automatically loads all applications linked to that job.
+
+### Alembic
+Handles database migrations. If you add a new column to a model in Phase 3, Alembic generates a migration script that safely updates the existing database without wiping it. Think of it as version control for your database schema.
+
+### Anthropic Claude API
+The AI brain of the project. You send it a prompt (text instructions + context), and it sends back a response — either plain text or structured JSON. All the intelligent tasks (scoring fit, writing cover letters, generating interview questions) go through this.
+
+### LangGraph
+A framework for building multi-step AI agent workflows. Instead of one big Claude call, you can define a graph of steps — e.g. "scrape job → score it → if score > 6, tailor resume → generate cover letter" — and LangGraph manages the flow, state, and branching logic between steps. Used in Phase 2+ for the orchestrator.
+
+### JobSpy
+A Python library that scrapes job listings from LinkedIn, Indeed, and Glassdoor. You give it keywords and locations, it returns a list of job postings. Saves us from having to write scrapers for each site ourselves.
+
+### Playwright + Chromium
+Playwright is a browser automation library. It controls a real Chrome browser (headlessly, in the background) so the code can visit websites, click buttons, fill forms, and read page content — just like a human would. Used for: scraping sites that block simple HTTP requests, auto-filling job applications on Greenhouse/Lever/Workday, and scraping LinkedIn.
+
+### SerpAPI (google-search-results)
+A paid API that wraps Google Search results in a clean JSON format. Used when we need to search the web programmatically — e.g. "find the LinkedIn page for this hiring manager" or "find recent news about this company."
+
+### python-docx
+Reads and writes `.docx` (Microsoft Word) files. Used to parse your base resume and write tailored resume versions per job.
+
+### pypdf
+Reads `.pdf` files. Used as a fallback if your resume is in PDF format rather than `.docx`.
+
+### Gmail API + google-auth
+Lets the app send emails from your Gmail account programmatically. Used in Phase 5 for outreach sequences. OAuth-based — your credentials never leave your machine.
+
+### APScheduler
+A background job scheduler. Lets you run functions on a timer — e.g. "run the job scraper every morning at 8am" — without needing a separate process or cron job.
+
+### Rich
+Makes terminal output look good. Tables, colors, progress bars, and formatted panels instead of plain `print()` statements.
+
+### pytest + pytest-asyncio
+The standard Python testing framework. You write test functions, run `pytest`, and it tells you which pass and which fail. `pytest-asyncio` adds support for testing async functions.
+
+---
+
 ## Tech Stack
 - **Language:** Python 3.11+
-- **AI:** Anthropic Claude API (`claude-sonnet-4-20250514`)
+- **AI:** Anthropic Claude API (`claude-sonnet-4-6`) ✅ corrected from original
 - **Agent Orchestration:** LangGraph
 - **CLI:** Typer
 - **Browser Automation:** Playwright + Chromium
 - **Database:** SQLite + SQLAlchemy
 - **Job Scraping:** JobSpy
-- **Search:** SerpAPI or Brave Search API
+- **Search:** SerpAPI (`google-search-results` package) ✅ corrected from original
 - **Email:** Gmail API + smtplib
-- **Resume/Doc editing:** python-docx
+- **Resume/Doc editing:** python-docx + pypdf ✅ corrected from pypdf2
 - **Scheduling:** APScheduler
+
+---
 
 ## Folder Structure
 ```
-job-agent/
+JobX/
 ├── main.py                        # Typer CLI entry point
 ├── config.py                      # API keys, user prefs, .env loader
 ├── requirements.txt
 ├── .env.example
+├── .gitignore
+├── alembic.ini                    # Alembic migration config
+├── alembic/                       # Migration scripts (auto-generated)
 ├── db/
 │   ├── __init__.py
 │   ├── models.py                  # SQLAlchemy ORM models
-│   └── session.py                 # DB session factory
+│   └── session.py                 # DB session factory + init_db()
 ├── agents/
 │   ├── __init__.py
 │   ├── orchestrator.py            # LangGraph master agent
-│   ├── searcher.py                # Job scraping + dedup
 │   ├── scorer.py                  # Fit score + ATS check + gap analysis
 │   ├── resume_tailor.py           # Resume rewriting per JD
 │   ├── cover_letter.py            # Cover letter generator
@@ -50,6 +112,8 @@ job-agent/
 │   ├── browser.py                 # Playwright session manager
 │   ├── search.py                  # SerpAPI wrapper
 │   └── gmail.py                   # Gmail API wrapper
+├── tools/prompts/                 # Prompt templates as .txt files
+├── tests/                         # pytest test files
 └── data/
     ├── base_resume.docx           # User's master resume (user provides)
     ├── resume_versions/           # Tailored resumes per job (auto-generated)
@@ -57,9 +121,10 @@ job-agent/
     └── jobs.db                    # SQLite database (auto-generated)
 ```
 
+---
+
 ## Database Models (db/models.py)
-Define these SQLAlchemy models:
-- `Job` — id, title, company, url, description, source, posted_date, fit_score, ats_score, status, created_at
+- `Job` — id, title, company, url, description, source, posted_date, fit_score, ats_score, gap_analysis (JSON), status, created_at
 - `Application` — id, job_id, applied_date, resume_version_path, cover_letter_path, status, notes
 - `Contact` — id, job_id, name, title, linkedin_url, email, company
 - `OutreachSequence` — id, contact_id, message_type (linkedin/email), sent_at, follow_up_due, response_received, status
@@ -75,42 +140,56 @@ Define these SQLAlchemy models:
 
 ---
 
-### PHASE 1 — Foundation
+### PHASE 1 — Foundation ✅ COMPLETE — 20/20 tests passing
 **Goal:** Scaffolding, DB, Claude wrapper, job scraper. Everything else depends on this.
-**Estimated Time:** 4–5 days
 
-#### Task 1.1 — Project Scaffolding & Config
-- [ ] Initialize project folder structure as shown above
-- [ ] Create `requirements.txt` with all dependencies
-- [ ] Create `.env.example` with required keys: `ANTHROPIC_API_KEY`, `SERPAPI_KEY`, `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`
-- [ ] Create `config.py` that loads `.env` and exposes typed config values
-- [ ] Create `main.py` Typer CLI skeleton with placeholder commands: `search`, `score`, `apply`, `outreach`, `prep`, `digest`
+#### Task 1.1 — Project Scaffolding & Config ✅ COMPLETE
+- [x] Initialize project folder structure
+- [x] Create `requirements.txt` with all dependencies (corrected: pypdf, google-search-results, pydantic-settings, removed linkedin-api)
+- [x] Create `.env.example` with required keys
+- [x] Create `config.py` using pydantic-settings — typed config, singleton `settings` object
+- [x] Create `main.py` Typer CLI skeleton with all commands stubbed out
+- [x] Create `.gitignore` (excludes .env, *.db, token.json, generated .docx files)
 
-#### Task 1.2 — Database Schema
-- [ ] Create all SQLAlchemy models listed above in `db/models.py`
-- [ ] Create `db/session.py` with session factory and `init_db()` function
-- [ ] Add `alembic` for migrations
-- [ ] Write a `python main.py db init` CLI command that initializes the database
+**What was built:**
+`config.py` reads your `.env` file and exposes everything as typed Python attributes (e.g. `settings.anthropic_api_key`). `main.py` is the CLI entry point — all commands are wired up but most print "coming in Phase X" until their phase is implemented.
 
-#### Task 1.3 — Claude Wrapper / LLM Core
-- [ ] Create `tools/llm.py` with a reusable `ClaudeClient` class
-- [ ] Support `chat()`, `chat_json()` (forces JSON response), and `chat_with_system()` methods
-- [ ] Add prompt template loader — store prompts as `.txt` files in `tools/prompts/`
-- [ ] Add retry logic and error handling
-- [ ] Model to use: `claude-sonnet-4-20250514`
+#### Task 1.2 — Database Schema ✅ COMPLETE
+- [x] Create all SQLAlchemy models in `db/models.py` (9 models, all relationships defined)
+- [x] Create `db/session.py` with `SessionLocal`, `get_session()` context manager, and `init_db()`
+- [x] Initialize Alembic and wire `alembic/env.py` to use our engine and models
+- [x] `python main.py db init` creates `data/jobs.db` with all 9 tables
 
-#### Task 1.4 — Job Scraper
-- [ ] Create `tools/scraper.py` wrapping JobSpy for LinkedIn, Indeed, Glassdoor
-- [ ] Filter to software engineer roles only (configurable keywords in config)
-- [ ] Implement deduplication by URL before inserting to DB
-- [ ] Track `last_scraped_at` so subsequent runs only fetch new listings
-- [ ] Implement `python main.py search` CLI command that triggers scraper and reports new jobs found
+**What was built:**
+`db/models.py` defines every table as a Python class. `db/session.py` provides `get_session()` — a context manager used like `with get_session() as db:` that auto-commits on success and auto-rolls back on error. `init_db()` creates all tables safely (won't overwrite existing data). Alembic is wired up for schema migrations in future phases.
+
+#### Task 1.3 — Claude Wrapper / LLM Core ✅ COMPLETE
+- [x] Create `tools/llm.py` with a reusable `ClaudeClient` class
+- [x] Support `chat()`, `chat_json()` (forces JSON response), and `chat_with_system()` methods
+- [x] Add prompt template loader — `load_prompt(template_name, **kwargs)` reads `.txt` files from `tools/prompts/` and substitutes `{variables}`
+- [x] Add retry logic — exponential backoff (1s, 2s, 4s) on rate limit and 5xx server errors, max 3 retries
+- [x] `chat_json()` strips markdown fences if Claude adds them anyway, retries once with a stricter nudge if JSON parse fails
+- [x] 10 pytest tests in `tests/test_llm.py` — all passing, no real API calls (mocked)
+
+**What was built:**
+`tools/llm.py` is the single entry point for all Claude API calls in the project. `ClaudeClient.chat()` returns a plain string. `chat_json()` appends a JSON instruction to the system prompt, strips any markdown fences from the response, and parses the result into a Python dict — if parsing fails it retries once with a clearer prompt. `load_prompt()` reads `.txt` template files from `tools/prompts/` and fills in `{variables}` like a string format. All agents in Phase 2+ will import `ClaudeClient` and `load_prompt` from here.
+
+#### Task 1.4 — Job Scraper ✅ COMPLETE
+- [x] Create `tools/scraper.py` wrapping JobSpy for LinkedIn, Indeed, Glassdoor
+- [x] Filter by `settings.target_roles` — skips any listing whose title doesn't match a configured keyword
+- [x] Deduplication by URL — checks existing DB rows before inserting, also dedupes within the same batch
+- [x] `data/scraper_state.json` tracks `last_scraped_at` — subsequent runs pass `hours_old` to JobSpy so only new listings are fetched
+- [x] `python main.py search` calls `run_scraper()`, prints a Rich table of new jobs found
+- [x] Fixed `expire_on_commit=False` on `SessionLocal` so ORM objects stay readable after their session closes
+- [x] 10 pytest tests in `tests/test_scraper.py` — all passing, no real network calls
+
+**What was built:**
+`tools/scraper.py` loops through every combination of `target_roles × target_locations` from `config.py`, calls JobSpy for each pair, then bulk-deduplicates the results against the `jobs` table before inserting. `data/scraper_state.json` records when the last scrape ran; on the next run it calculates how many hours have passed and only asks JobSpy for listings newer than that — so re-running `search` throughout the day won't pull the same jobs twice. Results are printed as a Rich table with title, company, source, and post date.
 
 ---
 
 ### PHASE 2 — Scoring & Prioritization
 **Goal:** Rank jobs before spending time on any of them.
-**Estimated Time:** 3–4 days
 **Depends on:** Phase 1 complete
 
 #### Task 2.1 — Resume Parser
@@ -140,7 +219,6 @@ Define these SQLAlchemy models:
 
 ### PHASE 3 — Application Prep
 **Goal:** Generate tailored application materials per job.
-**Estimated Time:** 2–3 days
 **Depends on:** Phase 2 complete
 
 #### Task 3.1 — Resume Tailor
@@ -160,8 +238,7 @@ Define these SQLAlchemy models:
 
 ### PHASE 3.5 — Interview Prep Agent (Expanded)
 **Goal:** Full interview preparation suite triggered once a job is worth pursuing.
-**Estimated Time:** 6–7 days
-**Depends on:** Phase 2 (gap analyzer), Phase 3 (application prep). Phase 4.1 (company research) will enrich 3.5.4 retroactively.
+**Depends on:** Phase 2 (gap analyzer), Phase 3 (application prep)
 
 #### Task 3.5.1 — Glassdoor Interview Review Scraper
 - [ ] Use Playwright in `tools/browser.py` to scrape Glassdoor interview reviews for a given company
@@ -181,7 +258,7 @@ Define these SQLAlchemy models:
 #### Task 3.5.4 — Company-Specific Prep
 - [ ] Generate "why do you want to work here" talking points
 - [ ] Pull recent eng blog posts or company news (SerpAPI) for informed questions to ask the interviewer
-- [ ] Note: this step gets significantly richer once Phase 4.1 (company research agent) is complete — add a hook to re-run this step with company research data when available
+- [ ] Note: this step gets significantly richer once Phase 4.1 (company research agent) is complete
 
 #### Task 3.5.5 — Mock Interview CLI Mode
 - [ ] `python main.py prep mock --job-id <id>` launches an interactive CLI loop
@@ -200,7 +277,6 @@ Define these SQLAlchemy models:
 
 ### PHASE 4 — Intelligence & Research
 **Goal:** Know the company deeply before applying or reaching out.
-**Estimated Time:** 5 days
 **Depends on:** Phase 1 (DB, scraper). Enriches Phase 3.2 and 3.5.4 retroactively.
 
 #### Task 4.1 — Company Research Agent
@@ -208,18 +284,15 @@ Define these SQLAlchemy models:
 - [ ] Sources to pull: Glassdoor rating (Playwright), recent news (SerpAPI), funding/stage (Crunchbase scrape or SerpAPI), tech stack (StackShare or Builtwith), layoff history (layoffs.fyi scrape)
 - [ ] Claude synthesizes into a structured `CompanyResearch` record
 - [ ] CLI: `python main.py research --company "Stripe"`
-- [ ] After building this, re-run cover letter and company-specific prep for any jobs already in DB
 
 #### Task 4.2 — Salary Intelligence Agent
 - [ ] In `agents/salary_intel.py`, scrape Levels.fyi and Glassdoor for comp data
 - [ ] Inputs: company name + role level (junior/mid/senior)
 - [ ] Output: salary range, equity range, bonus, total comp — stored in `SalaryData`
 - [ ] CLI: `python main.py salary --company "Stripe" --level senior`
-- [ ] Use this to auto-flag jobs that are likely underpaying based on your target comp
 
 #### Task 4.3 — Hiring Signal Detector
 - [ ] Monitor job posting velocity: if a company posts 3+ eng roles in 7 days, flag as "hiring surge"
-- [ ] This runs automatically during `python main.py search` — check posting counts per company in DB
 - [ ] Also use SerpAPI to find LinkedIn posts where employees say "we're hiring"
 - [ ] Boost `fit_score` priority for companies with active hiring signals
 
@@ -227,90 +300,70 @@ Define these SQLAlchemy models:
 
 ### PHASE 5 — Outreach
 **Goal:** Get a human to see your application.
-**Estimated Time:** 6 days
 **Depends on:** Phase 4 complete (need company research before reaching out)
 
 #### Task 5.1 — Referral Detector
 - [ ] User exports LinkedIn connections as CSV (Settings → Data Export)
 - [ ] `python main.py referrals --job-id <id>` cross-references CSV against job's company
 - [ ] Outputs matching connections with their title and LinkedIn URL
-- [ ] Highest ROI feature in the entire suite — always check before cold outreach
 
 #### Task 5.2 — Contact Finder
 - [ ] In `agents/contact_finder.py`, use SerpAPI to search `site:linkedin.com [company] recruiter software engineer`
-- [ ] Also search for engineering managers at the target team if inferable from JD
 - [ ] Playwright to visit and parse LinkedIn profiles
 - [ ] Store found contacts in `Contact` model linked to job
 
 #### Task 5.3 — Outreach Message Generator
 - [ ] Claude writes personalized LinkedIn DM or email using: contact name/title, company research, your background, the specific role
 - [ ] Two variants per contact: short LinkedIn DM (300 chars) and longer email version
-- [ ] Never generic — every message references something specific about the company or role
 
 #### Task 5.4 — Outreach Sequence Manager
 - [ ] In `agents/outreach.py`, manage full send → follow-up → ghost lifecycle
 - [ ] Day 0: send initial message via Gmail API
 - [ ] Day 5: if no response, send follow-up
 - [ ] Day 10: mark as ghosted
-- [ ] `python main.py outreach --due` shows all follow-ups due today
 - [ ] All state tracked in `OutreachSequence` table
 
 ---
 
 ### PHASE 6 — Auto-Application
 **Goal:** Submit applications automatically via Playwright.
-**Estimated Time:** 8–12 days
 **Depends on:** Phase 3 complete (need tailored resume + cover letter before applying)
 **Note:** Most brittle phase — ATS sites update their DOM frequently. Build with resilience in mind.
 
 #### Task 6.1 — Greenhouse Autofill
 - [ ] Playwright selectors for standard Greenhouse application form
-- [ ] Fill: name, email, phone, LinkedIn, resume upload, cover letter upload, custom questions
 - [ ] Claude answers custom questions using JD + resume context
 - [ ] Log application to `Application` table on success
 
 #### Task 6.2 — Lever Autofill
 - [ ] Same approach as Greenhouse for Lever ATS
-- [ ] Lever forms are simpler — should be faster to build
 
 #### Task 6.3 — Workday Autofill
-- [ ] Workday is the most complex — expect significant Playwright work
 - [ ] Multi-step forms, dynamic fields, login-wall behavior
 - [ ] Build with extra error handling and screenshot-on-failure for debugging
 
 #### Task 6.4 — LinkedIn Easy Apply
 - [ ] Playwright automation for LinkedIn Easy Apply flow
-- [ ] Handle multi-step and single-step variants
 - [ ] Requires LinkedIn session cookie management
 
 ---
 
 ### PHASE 7 — Analytics & Feedback Loop
 **Goal:** Make the system smarter over time.
-**Estimated Time:** 3–5 days
 **Depends on:** All previous phases generating data
 
 #### Task 7.1 — Response Rate Analyzer
 - [ ] Query `OutreachSequence` and `Application` tables to compute response rates
-- [ ] Break down by: resume version, outreach message type, job source, company size, role type
 - [ ] Claude summarizes patterns: "Your response rate is 3x higher for Series B startups vs FAANG"
 
 #### Task 7.2 — Interview Outcome Tracker
 - [ ] `python main.py outcome --job-id <id>` prompts user to log interview result
-- [ ] Fields: stage reached, rejection reason, feedback received
-- [ ] Claude analyzes patterns across outcomes + mock interview sessions from 3.5.5
-- [ ] Generates actionable insight: "You're consistently reaching final rounds but losing on system design"
+- [ ] Claude analyzes patterns across outcomes + mock interview sessions
 - [ ] Feeds updated study plan back to Phase 3.5.6
 
 #### Task 7.3 — Daily Digest Command
 - [ ] `python main.py digest` — the daily driver command
-- [ ] Output sections:
-  - New jobs found since last run, ranked by fit score
-  - Follow-ups due today (from outreach sequences)
-  - Companies with hiring surges detected
-  - Your current pipeline: X applied / Y responded / Z interviewing
-  - Any study plan items due today
-- [ ] Keep output clean and scannable — this is what you run every morning
+- [ ] Sections: new jobs ranked by fit, follow-ups due today, hiring surges, pipeline summary, study plan items due
 
 ---
 
@@ -321,7 +374,7 @@ python main.py search               # Scrape new job listings
 python main.py score                # Score and rank all unscored jobs
 python main.py research --company   # Run company research agent
 python main.py salary --company --level  # Get salary intel
-python main.py prep --job-id        # Generate interview prep for a job
+python main.py prep run --job-id    # Generate interview prep for a job
 python main.py prep mock --job-id   # Start mock interview session
 python main.py referrals --job-id   # Check LinkedIn connections at company
 python main.py outreach --job-id    # Find contacts + generate messages
@@ -344,13 +397,13 @@ ANTHROPIC_API_KEY=
 SERPAPI_KEY=
 GMAIL_CLIENT_ID=
 GMAIL_CLIENT_SECRET=
-GMAIL_REFRESH_TOKEN=
-LINKEDIN_EMAIL=           # for linkedin-api / Playwright sessions
+# token.json is written automatically by the Gmail OAuth flow at runtime
+LINKEDIN_EMAIL=
 LINKEDIN_PASSWORD=
 TARGET_ROLES=Software Engineer,Backend Engineer,Full Stack Engineer
 TARGET_LOCATIONS=Remote,San Francisco,New York
-MIN_FIT_SCORE=6           # only prep materials for jobs above this threshold
-TARGET_COMP_MIN=150000    # flag jobs likely below this
+MIN_FIT_SCORE=6
+TARGET_COMP_MIN=150000
 ```
 
 ## Dependencies (requirements.txt)
@@ -358,20 +411,24 @@ TARGET_COMP_MIN=150000    # flag jobs likely below this
 anthropic
 langgraph
 langchain-core
-typer
+typer[all]
 sqlalchemy
 alembic
 jobspy
 playwright
-serpapi
+google-search-results        # ✅ corrected from 'serpapi'
 python-docx
-pypdf2
+pypdf                        # ✅ corrected from 'pypdf2'
 apscheduler
 google-auth
 google-auth-oauthlib
 google-api-python-client
-linkedin-api
 requests
 python-dotenv
-rich                      # for pretty CLI output
+rich
+pydantic
+pydantic-settings            # ✅ added
+pytest                       # ✅ added
+pytest-asyncio               # ✅ added
+# linkedin-api removed — violates ToS, use Playwright instead
 ```

@@ -27,10 +27,51 @@ def db_init():
 # ---------------------------------------------------------------------------
 
 @app.command()
-def search():
-    """Scrape new job listings and store them in the database."""
+def search(
+    hours_back: int = typer.Option(
+        None,
+        "--hours-back",
+        help="Hours back to search. Auto-calculates from last run if omitted (default 24h on first run).",
+    ),
+    location: str = typer.Option(
+        None,
+        "--location",
+        help="Location to search (e.g. 'Remote', 'New York', 'San Francisco'). Overrides TARGET_LOCATIONS in .env for this run.",
+    ),
+    level: str = typer.Option(
+        None,
+        "--level",
+        help="Seniority level to filter for: intern, junior, mid, senior, staff. Appended to each search term.",
+    ),
+    job_type: str = typer.Option(
+        None,
+        "--job-type",
+        help="Work arrangement: remote, hybrid, onsite. Filters results accordingly.",
+    ),
+    results: int = typer.Option(
+        15,
+        "--results",
+        help="Max listings to fetch per role/location combination. Lower = faster. Default: 15.",
+    ),
+):
+    """Scrape new job listings and store them in the database.
+
+    Examples:
+
+      python main.py search
+
+      python main.py search --location Remote --level senior
+
+      python main.py search --hours-back 48 --job-type remote --results 20
+    """
     from tools.scraper import run_scraper
-    run_scraper()
+    run_scraper(
+        hours_back=hours_back,
+        location_override=location,
+        level=level,
+        job_type=job_type,
+        results_per_query=results,
+    )
 
 
 # ---------------------------------------------------------------------------

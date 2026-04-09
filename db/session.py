@@ -16,7 +16,7 @@ engine = create_engine(
     connect_args={"check_same_thread": False},  # needed for SQLite
 )
 
-SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False, expire_on_commit=False)
 
 
 @contextmanager

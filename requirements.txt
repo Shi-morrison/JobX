@@ -4,7 +4,7 @@ langchain-core
 typer[all]
 sqlalchemy
 alembic
-jobspy
+python-jobspy
 playwright
 google-search-results
 python-docx
