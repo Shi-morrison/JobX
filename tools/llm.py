@@ -8,8 +8,23 @@ import anthropic
 
 from config import settings
 
+_RESUME_CACHE_FILE = Path("data/resume_parsed.json")
+_RESUME_DOCX = Path("data/base_resume.docx")
+
 _PROMPTS_DIR = Path(__file__).parent / "prompts"
-_client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+_client: anthropic.Anthropic | None = None
+
+
+def _get_client() -> anthropic.Anthropic:
+    """Lazy-initialize the Anthropic client so the API key is read at call time, not import time."""
+    global _client
+    if _client is None:
+        if not settings.anthropic_api_key:
+            raise RuntimeError(
+                "ANTHROPIC_API_KEY is not set. Add it to your .env file and try again."
+            )
+        _client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+    return _client
 
 
 def load_prompt(template_name: str, **kwargs: Any) -> str:
@@ -125,7 +140,7 @@ class ClaudeClient:
             kwargs["system"] = system
 
         try:
-            response = _client.messages.create(**kwargs)
+            response = _get_client().messages.create(**kwargs)
             return response.content[0].text
 
         except anthropic.RateLimitError:
@@ -163,3 +178,52 @@ class ClaudeClient:
             return json.loads(text)
         except json.JSONDecodeError as e:
             raise ValueError(f"Could not parse Claude response as JSON: {e}\n\nRaw response:\n{text}")
+
+
+# ---------------------------------------------------------------------------
+# Resume parser (standalone — used by all Phase 2+ agents)
+# ---------------------------------------------------------------------------
+
+def _extract_resume_text() -> str:
+    """Extract plain text from data/base_resume.docx."""
+    try:
+        from docx import Document
+    except ImportError:
+        raise RuntimeError("python-docx not installed. Run: pip install -r requirements.txt")
+
+    if not _RESUME_DOCX.exists():
+        raise FileNotFoundError(
+            f"Resume not found at {_RESUME_DOCX}. "
+            "Place your resume at data/base_resume.docx and try again."
+        )
+
+    doc = Document(_RESUME_DOCX)
+    lines = [para.text for para in doc.paragraphs if para.text.strip()]
+    return "\n".join(lines)
+
+
+def parse_resume(force: bool = False) -> dict:
+    """Parse the resume and return structured data as a dict.
+
+    Results are cached to data/resume_parsed.json so Claude is only called
+    once. Pass force=True to re-parse (e.g. after updating your resume).
+
+    Returns:
+        Dict with keys: name, contact, skills, experience, education, projects
+    """
+    if not force and _RESUME_CACHE_FILE.exists():
+        return json.loads(_RESUME_CACHE_FILE.read_text())
+
+    resume_text = _extract_resume_text()
+    prompt = load_prompt("parse_resume", resume_text=resume_text)
+
+    client = ClaudeClient()
+    result = client.chat_json(
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=4096,
+    )
+
+    _RESUME_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _RESUME_CACHE_FILE.write_text(json.dumps(result, indent=2))
+
+    return result

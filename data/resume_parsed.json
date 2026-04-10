@@ -1,0 +1,129 @@
+{
+  "name": "Shian Morrison",
+  "contact": {
+    "email": "shian.morrison@gmail.com",
+    "phone": "917-796-4819",
+    "linkedin": "linkedin.com/in/shianmorrison1",
+    "github": "github.com/Shi-morrison",
+    "website": "shianmorrison.dev/"
+  },
+  "skills": [
+    "Java",
+    "Python",
+    "TypeScript",
+    "SQL",
+    "Go",
+    "React",
+    "Node.js",
+    "Spring Boot",
+    "Next.js",
+    "Tailwind",
+    "RadixUI",
+    "AWS Lambda",
+    "Amazon Cognito",
+    "OpenAI",
+    "AWS Polly",
+    "DynamoDB",
+    "Docker",
+    "AWS CDK",
+    "WebSocket",
+    "Vanta.js",
+    "Amazon S3",
+    "Amazon Web Services",
+    "Azure AD B2C",
+    "Azure Cosmos DB",
+    "Roaring Bitmaps"
+  ],
+  "experience": [
+    {
+      "title": "Software Development Engineer",
+      "company": "Amazon Web Services",
+      "location": "Palo Alto, CA",
+      "start_date": "June 2025",
+      "end_date": "Present",
+      "bullets": [
+        "Contributed to a high-performance search platform in Go using Roaring Bitmaps, supporting efficient large-scale filtering and low-latency queries.",
+        "Developed and optimized bitmap indexing workflows, including storing indexes in Amazon S3 and managing domain metadata in DynamoDB.",
+        "Improved query performance and system scalability through optimized data storage and retrieval strategies."
+      ]
+    },
+    {
+      "title": "Software Development Engineer Intern",
+      "company": "Amazon Web Services",
+      "location": "Seattle, WA",
+      "start_date": "June 2024",
+      "end_date": "September 2024",
+      "bullets": [
+        "Engineered an operations automation tool that streamlined manual tasks for on-call engineers by automating log retrieval, custom log queries, and metric graph generation, reducing operational inefficiencies by 30%.",
+        "Delivered a fully deployed automation solution that enhanced operational workflows, resulting in measurable reductions in manual effort and improved system monitoring capabilities."
+      ]
+    },
+    {
+      "title": "Junior Software Engineer",
+      "company": "Almma.AI",
+      "location": "Remote",
+      "start_date": "January 2024",
+      "end_date": "June 2024",
+      "bullets": [
+        "Developed and deployed secure authentication mechanisms using Azure AD B2C, ensuring user data protection and compliance with modern security standards into Capable Almma.",
+        "Designed and optimized RESTful APIs to collect, store, and process user data in Azure Cosmos DB, enabling scalable and efficient data management for analytics."
+      ]
+    }
+  ],
+  "education": [
+    {
+      "institution": "University of Central Florida",
+      "degree": "Bachelor of Science in Computer Science",
+      "location": "Orlando, FL",
+      "start_date": "August 2021",
+      "end_date": "May 2025",
+      "relevant_coursework": [
+        "Artificial Intelligence",
+        "Computer Logic & Organization",
+        "Data Structures & Algorithms",
+        "Discrete Structures",
+        "Introduction to C programming",
+        "Machine Learning",
+        "Object-Oriented Programming",
+        "Operating Systems"
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "name": "OverTone",
+      "technologies": [
+        "Next.js",
+        "React",
+        "Tailwind",
+        "RadixUI",
+        "AWS Lambda",
+        "Amazon Cognito",
+        "OpenAI",
+        "AWS Polly",
+        "DynamoDB",
+        "Go",
+        "Docker",
+        "AWS"
+      ],
+      "bullets": [
+        "Led a team to develop a text-to-speech chat application by integrating AWS Polly and OpenAI APIs.",
+        "Architected and deployed infrastructure using AWS CDK in GoLang."
+      ]
+    },
+    {
+      "name": "Chess 10",
+      "technologies": [
+        "React",
+        "WebSocket",
+        "Vanta.js",
+        "TypeScript",
+        "Tailwind"
+      ],
+      "bullets": [
+        "Spearheaded the development of Chess 10, an innovative 3D multiplayer chess application with a unique \"en passant\" rule, revolutionizing traditional chess game play.",
+        "Collaborated with a team to design and implement real-time multiplayer functionality using WebSocket, ensuring seamless player experiences with minimal latency."
+      ]
+    }
+  ]
+}

@@ -140,7 +140,7 @@ JobX/
 
 ---
 
-### PHASE 1 — Foundation ✅ COMPLETE — 20/20 tests passing
+### PHASE 1 — Foundation ✅ COMPLETE — 20 tests passing
 **Goal:** Scaffolding, DB, Claude wrapper, job scraper. Everything else depends on this.
 
 #### Task 1.1 — Project Scaffolding & Config ✅ COMPLETE
@@ -188,32 +188,65 @@ JobX/
 
 ---
 
-### PHASE 2 — Scoring & Prioritization
+### PHASE 2 — Scoring & Prioritization ✅ COMPLETE — 18 tests passing
 **Goal:** Rank jobs before spending time on any of them.
 **Depends on:** Phase 1 complete
 
-#### Task 2.1 — Resume Parser
-- [ ] Create a function in `tools/llm.py` that reads `data/base_resume.docx` using `python-docx`
-- [ ] Extract structured data: skills, experience entries (company/title/bullets), education
-- [ ] Store as a Python dict that gets passed into all scoring/tailoring prompts
+#### Task 2.1 — Resume Parser ✅ COMPLETE
+- [x] `_extract_resume_text()` reads `data/base_resume.docx` via python-docx, strips blank lines
+- [x] `parse_resume()` sends resume text to Claude using `tools/prompts/parse_resume.txt` and returns a structured dict with: name, contact, skills, experience (with bullets), education, projects
+- [x] Results cached to `data/resume_parsed.json` — Claude only called once. Pass `force=True` to re-parse after updating your resume.
+- [x] Fixed `config.py` — `TARGET_ROLES` and `TARGET_LOCATIONS` in `.env` must now be JSON arrays (e.g. `["Remote","New York"]`) so pydantic-settings v2 can parse them correctly
+- [x] 5 pytest tests in `tests/test_resume_parser.py` — all passing
 
-#### Task 2.2 — Fit Scorer
-- [ ] In `agents/scorer.py`, build a `score_fit(job, resume_data)` function
-- [ ] Claude prompt: given JD + resume, return JSON with `fit_score` (1–10), `matching_skills`, `missing_skills`, `reasoning`
-- [ ] Update `Job.fit_score` in DB after scoring
-- [ ] CLI: `python main.py score` — scores all unscored jobs, prints ranked list
+**What was built:**
+`parse_resume()` in `tools/llm.py` is the single function all Phase 2+ agents call to get your resume data. It reads `data/base_resume.docx`, sends the full text to Claude with a structured prompt, and returns a Python dict with skills as a flat list (pulled from everywhere in the resume), plus structured experience/education/projects. Results are cached so repeated runs don't cost extra API calls. Re-run with `force=True` whenever you update your resume.
 
-#### Task 2.3 — ATS Keyword Checker
-- [ ] Extract keywords from JD using Claude (role-specific terms, technologies, certifications)
-- [ ] Cross-reference against resume text
-- [ ] Return `ats_score` (% of key terms present) and `missing_keywords` list
-- [ ] Store on `Job` model
+#### Task 2.2 — Fit Scorer ✅ COMPLETE
+- [x] `agents/scorer.py` — `score_fit(job, resume_data)` calls Claude with JD + resume, returns `fit_score` (1-10), `matching_skills`, `missing_skills`, `reasoning`
+- [x] Score is clamped to 1–10 and persisted to `Job.fit_score` in DB, status set to `scored`
+- [x] `run_scorer()` scores all unscored jobs in DB, prints color-coded ranked table (green ≥7, yellow ≥5, red <5)
+- [x] `python main.py score` wired up with `--min-score` and `--show-reasoning` flags
+- [x] Job descriptions truncated to 4000 chars to stay within token limits
+- [x] 7 pytest tests in `tests/test_scorer.py` — all passing, no real API calls
 
-#### Task 2.4 — Gap Analyzer
-- [ ] Claude prompt: given missing skills from 2.2 and missing keywords from 2.3, generate a `gap_analysis` JSON
-- [ ] Fields: `hard_gaps` (can't frame around), `soft_gaps` (can reframe), `reframe_suggestions` (how to cover soft gaps with existing experience)
-- [ ] Store on `Job` model as JSON field
-- [ ] This output feeds directly into Phase 3.1 (resume tailor) and Phase 3.5.6 (study plan)
+**What was built:**
+`score_fit()` in `agents/scorer.py` builds a compact experience summary from your parsed resume, loads the `score_fit.txt` prompt template, and asks Claude to return structured JSON. `run_scorer()` fetches all unscored jobs from the DB, scores each one, saves the score, and prints a ranked table. Tested live against 5 real scraped jobs — correctly ranked Robinhood (Go/backend) highest and DraftKings (games stack) lowest.
+
+#### Task 2.3 — ATS Keyword Checker ✅ COMPLETE
+- [x] `check_ats(job, resume_data)` in `agents/scorer.py` — Claude extracts 10-20 technical keywords from the JD, cross-references against resume skills, returns `ats_score` (0-100%), `matched_keywords`, `missing_keywords`
+- [x] Score clamped to 0-100 and persisted to `Job.ats_score` in DB
+- [x] 3 pytest tests — all passing
+
+**What was built:**
+`check_ats()` sends the JD and candidate skills to Claude with a focused prompt that ignores soft skills and targets technical terms only. Returns a percentage score representing ATS keyword coverage, plus the full matched/missing keyword lists which feed directly into the gap analyzer.
+
+#### Task 2.4 — Gap Analyzer ✅ COMPLETE
+- [x] `analyze_gaps(fit_result, ats_result, resume_data)` in `agents/scorer.py` — classifies gaps as hard (can't reframe) or soft (can reframe using existing experience)
+- [x] Skips Claude call entirely if no gaps detected — saves API cost
+- [x] `reframe_suggestions` tied to candidate's actual experience, not hypothetical
+- [x] Result persisted to `Job.gap_analysis` JSON field in DB
+- [x] `run_scorer()` updated to run all three steps (fit → ATS → gaps) per job in one `python main.py score` call
+- [x] Score table now shows Fit score, ATS%, matching skills, and hard gaps columns
+- [x] 3 pytest tests — all passing (38/38 total)
+
+**What was built:**
+`analyze_gaps()` takes the missing skills list from the fit scorer and the missing keywords list from the ATS checker, then asks Claude to classify each as a hard gap (genuinely missing, can't be reframed) or soft gap (can be addressed by reframing existing experience). For each soft gap it generates a specific reframe suggestion tied to the candidate's actual bullets. This output is what Phase 3 resume tailoring will consume directly.
+
+#### Task 2.5 — Job Lifecycle & Search UX ✅ COMPLETE
+- [x] `--recent` flag on `score` — sorts by most recently posted first (fewest applicants); combine with `--limit` to target freshest batch
+- [x] `--search TEXT` flag on `jobs` — case-insensitive filter on title or company name (find a job you remember by company without needing its ID)
+- [x] `--unscored` flag on `jobs` — lists jobs not yet scored, sorted by newest posted; shows IDs for use with `score --job-id`
+- [x] `--applied` flag on `jobs` — shows only applied jobs (your application pipeline)
+- [x] `--all` flag on `jobs` — shows every job in the DB regardless of status
+- [x] Applied jobs hidden from default `jobs` view — list stays clean as you apply
+- [x] `python main.py mark-applied --job-id <id>` — sets `Job.status = "applied"`, hides from default list
+- [x] `show` command now displays fit reasoning stored from scoring run
+- [x] Fit reasoning persisted to `gap_analysis` JSON field as `fit_reasoning` key so it survives DB across sessions
+- [x] Status column added to all `jobs` table views
+
+**What was built:**
+The daily workflow is now: `search` → `score --recent --limit 10` → `jobs` → `jobs --search "company"` → `show --job-id X` → `mark-applied --job-id X`. Applied jobs are hidden automatically so the list stays focused. `--search` solves "I remember the company but can't find the ID" without needing a database UI.
 
 ---
 

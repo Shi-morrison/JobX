@@ -4,7 +4,11 @@ from typing import List
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     # Anthropic
     anthropic_api_key: str = Field(default="", alias="ANTHROPIC_API_KEY")
@@ -21,8 +25,16 @@ class Settings(BaseSettings):
     linkedin_password: str = Field(default="", alias="LINKEDIN_PASSWORD")
 
     # Job search preferences
-    target_roles: List[str] = Field(default=["Software Engineer", "Backend Engineer", "Full Stack Engineer"])
-    target_locations: List[str] = Field(default=["Remote", "San Francisco", "New York"])
+    # Note: list values must be JSON arrays in .env, e.g.:
+    # TARGET_ROLES=["Software Engineer","Backend Engineer"]
+    target_roles: List[str] = Field(
+        default=["Software Engineer", "Backend Engineer", "Full Stack Engineer"],
+        alias="TARGET_ROLES",
+    )
+    target_locations: List[str] = Field(
+        default=["Remote", "San Francisco", "New York"],
+        alias="TARGET_LOCATIONS",
+    )
     min_fit_score: int = Field(default=6, alias="MIN_FIT_SCORE")
     target_comp_min: int = Field(default=150000, alias="TARGET_COMP_MIN")
 
@@ -35,18 +47,6 @@ class Settings(BaseSettings):
     @property
     def database_url(self) -> str:
         return f"sqlite:///{self.db_path}"
-
-    @classmethod
-    def _parse_list_env(cls, v: str) -> List[str]:
-        return [item.strip() for item in v.split(",") if item.strip()]
-
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore",
-        # Allow comma-separated strings for list fields
-        env_parse_none_str="None",
-    )
 
 
 settings = Settings()

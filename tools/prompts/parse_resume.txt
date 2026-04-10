@@ -1,0 +1,50 @@
+You are a resume parser. Extract structured information from the resume text below.
+
+Return a JSON object with exactly this structure:
+{{
+  "name": "full name",
+  "contact": {{
+    "email": "...",
+    "phone": "...",
+    "linkedin": "...",
+    "github": "...",
+    "website": "..."
+  }},
+  "skills": ["skill1", "skill2", ...],
+  "experience": [
+    {{
+      "title": "job title",
+      "company": "company name",
+      "location": "city, state or Remote",
+      "start_date": "Month YYYY",
+      "end_date": "Month YYYY or Present",
+      "bullets": ["bullet 1", "bullet 2", ...]
+    }}
+  ],
+  "education": [
+    {{
+      "institution": "university name",
+      "degree": "degree type and field",
+      "location": "city, state",
+      "start_date": "Month YYYY",
+      "end_date": "Month YYYY",
+      "relevant_coursework": ["course1", "course2", ...]
+    }}
+  ],
+  "projects": [
+    {{
+      "name": "project name",
+      "technologies": ["tech1", "tech2", ...],
+      "bullets": ["bullet 1", "bullet 2", ...]
+    }}
+  ]
+}}
+
+Rules:
+- skills should be a flat list of all technical skills mentioned anywhere in the resume (languages, frameworks, tools, platforms)
+- If a field is not present, use null for strings or [] for arrays
+- Do not invent or infer information not present in the resume
+- Return only the JSON object, no explanation
+
+Resume text:
+{resume_text}

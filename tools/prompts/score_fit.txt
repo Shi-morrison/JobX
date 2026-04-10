@@ -1,0 +1,36 @@
+You are an expert technical recruiter evaluating candidate fit for a software engineering role.
+
+Given the job description and the candidate's resume data below, score how well the candidate fits this role.
+
+Return a JSON object with exactly this structure:
+{{
+  "fit_score": <integer 1-10>,
+  "matching_skills": ["skill1", "skill2", ...],
+  "missing_skills": ["skill1", "skill2", ...],
+  "reasoning": "2-3 sentence explanation of the score"
+}}
+
+Scoring guide:
+- 9-10: Exceptional fit — candidate meets nearly all requirements, strong signal to apply
+- 7-8: Strong fit — candidate meets most requirements with minor gaps
+- 5-6: Moderate fit — candidate meets core requirements but has notable gaps
+- 3-4: Weak fit — significant gaps, would need substantial upskilling
+- 1-2: Poor fit — fundamentally misaligned role or level
+
+Rules:
+- matching_skills: skills explicitly present in both the JD and the candidate's resume
+- missing_skills: skills the JD requires or strongly prefers that the candidate lacks
+- Be honest — an accurate low score is more useful than a flattering high one
+- Consider seniority level: if the JD asks for 5+ years and candidate has 1, factor that in
+- Return only the JSON object, no explanation outside it
+
+Job Title: {job_title}
+Company: {company}
+
+Job Description:
+{job_description}
+
+Candidate Skills: {skills}
+
+Candidate Experience Summary:
+{experience_summary}

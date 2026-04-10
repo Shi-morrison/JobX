@@ -17,6 +17,14 @@ _STATE_FILE = Path("data/scraper_state.json")
 # Stick to LinkedIn and Indeed which handle "Remote" correctly.
 _SITES = ["linkedin", "indeed"]
 
+_LEVEL_KEYWORDS = {
+    "intern": "Intern",
+    "junior": "Junior",
+    "mid": "Mid-level",
+    "senior": "Senior",
+    "staff": "Staff",
+}
+
 
 # ---------------------------------------------------------------------------
 # State helpers
@@ -42,33 +50,27 @@ def _hours_since_last_scrape(state: dict) -> float | None:
     return delta.total_seconds() / 3600
 
 
+def _normalize_location(location: str) -> str:
+    """Normalize location string — 'remote' / 'REMOTE' all become 'Remote'."""
+    if location.strip().lower() == "remote":
+        return "Remote"
+    return location.strip().title()
+
+
 # ---------------------------------------------------------------------------
 # Core scrape logic
 # ---------------------------------------------------------------------------
-
-_JOB_TYPE_MAP = {
-    "remote": {"is_remote": True},
-    "hybrid": {},   # JobSpy has no hybrid filter; we post-filter by title/desc
-    "onsite": {"is_remote": False},
-}
-
-_LEVEL_KEYWORDS = {
-    "intern": "Intern",
-    "junior": "Junior",
-    "mid": "Mid-level",
-    "senior": "Senior",
-    "staff": "Staff",
-}
-
 
 def _scrape_one(
     role: str,
     location: str,
     hours_old: int,
-    job_type: str | None = None,
     results_per_query: int = 15,
 ) -> list[dict]:
-    """Scrape one role+location combo. Returns a list of job dicts."""
+    """Scrape one role+location combo. Returns a list of job dicts.
+
+    If location is 'Remote', passes is_remote=True to JobSpy for a tighter filter.
+    """
     try:
         from jobspy import scrape_jobs  # lazy import — heavy dependency
     except ImportError:
@@ -82,8 +84,8 @@ def _scrape_one(
         "results_wanted": results_per_query,
         "hours_old": hours_old,
     }
-    if job_type and job_type in _JOB_TYPE_MAP:
-        kwargs.update(_JOB_TYPE_MAP[job_type])
+    if location == "Remote":
+        kwargs["is_remote"] = True
 
     try:
         df = scrape_jobs(**kwargs)
@@ -184,16 +186,15 @@ def run_scraper(
     hours_back: int | None = None,
     location_override: str | None = None,
     level: str | None = None,
-    job_type: str | None = None,
     results_per_query: int = 15,
 ) -> None:
     """Scrape new job listings and store them in the database.
 
     Args:
         hours_back: How far back to look. Auto-calculates from last run if None (default 24h).
-        location_override: Single location string overriding TARGET_LOCATIONS in .env.
+        location_override: Single location overriding TARGET_LOCATIONS in .env.
+                           Case-insensitive — 'remote', 'Remote', 'REMOTE' all work.
         level: Seniority level — intern/junior/mid/senior/staff. Prepended to each search term.
-        job_type: Work arrangement — remote/hybrid/onsite. Passed to JobSpy filter.
         results_per_query: Max listings per role/location combo. Default 15.
     """
     init_db()
@@ -206,13 +207,13 @@ def run_scraper(
     else:
         hours_since = _hours_since_last_scrape(state)
         if hours_since is not None:
-            hours_old = max(int(hours_since) + 1, 24)  # minimum 24h window
+            hours_old = max(int(hours_since) + 1, 24)
             console.print(f"[dim]Last scraped {hours_since:.1f}h ago — fetching listings from the last {hours_old}h.[/dim]")
         else:
             hours_old = 24
             console.print("[dim]First run — fetching listings from the last 24 hours.[/dim]")
 
-    # Build search terms — prepend level keyword if provided (e.g. "Senior Software Engineer")
+    # Build search terms — prepend level keyword if provided
     base_roles = settings.target_roles
     if level:
         level_word = _LEVEL_KEYWORDS.get(level.lower(), level.capitalize())
@@ -221,24 +222,25 @@ def run_scraper(
     else:
         roles = base_roles
 
-    locations = [location_override] if location_override else settings.target_locations
+    # Normalize locations — user can type 'remote', 'Remote', or 'REMOTE'
+    if location_override:
+        locations = [_normalize_location(location_override)]
+    else:
+        locations = [_normalize_location(loc) for loc in settings.target_locations]
 
-    if job_type:
-        console.print(f"[dim]Job type filter: [bold]{job_type}[/bold][/dim]")
+    console.print(f"[dim]Locations: {', '.join(locations)}[/dim]")
 
     all_jobs: list[dict] = []
     with console.status(f"Scraping {len(roles)} roles × {len(locations)} locations via LinkedIn & Indeed..."):
         for role in roles:
             for location in locations:
-                raw = _scrape_one(role, location, hours_old, job_type=job_type, results_per_query=results_per_query)
+                raw = _scrape_one(role, location, hours_old, results_per_query=results_per_query)
                 all_jobs.extend(raw)
 
     console.print(f"[dim]Fetched {len(all_jobs)} raw listings. Deduplicating...[/dim]")
 
     new_jobs = _insert_new_jobs(all_jobs)
 
-    # Only save state if we actually attempted a scrape (even if 0 new jobs —
-    # that's valid. We do NOT save if all_jobs is empty due to import errors.)
     if all_jobs is not None:
         state["last_scraped_at"] = datetime.now(timezone.utc).isoformat()
         _save_state(state)

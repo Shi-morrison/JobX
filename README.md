@@ -11,7 +11,8 @@ Built with Python, Claude AI, SQLite, and Playwright.
 | Phase | Feature | Status |
 |---|---|---|
 | 1 | Job scraping (LinkedIn + Indeed) | ✅ Live |
-| 2 | Resume parsing + fit scoring + ATS check + gap analysis | 🔨 In progress |
+| 2 | Resume parsing + fit scoring + ATS check + gap analysis | ✅ Live |
+| 2.5 | Job lifecycle: search, filter, mark-applied, applied pipeline | ✅ Live |
 | 3 | Resume tailoring + cover letter generation | Planned |
 | 3.5 | Interview prep (questions, mock sessions, study plan) | Planned |
 | 4 | Company research + salary intelligence + hiring signals | Planned |
@@ -86,27 +87,102 @@ Pulls new listings from LinkedIn and Indeed based on your configured roles and l
 **Options:**
 ```
 --hours-back INTEGER   How many hours back to search (default: auto since last run)
---location TEXT        Override location for this run (e.g. "Remote", "New York")
+--location TEXT        Location to search — use "remote" for remote jobs, or a city
+                       like "New York". Case-insensitive. Overrides TARGET_LOCATIONS in .env.
 --level TEXT           Seniority filter: intern, junior, mid, senior, staff
---job-type TEXT        Work arrangement: remote, hybrid, onsite
 --results INTEGER      Max listings per role/location combo (default: 15)
+--help                 Show all flags and examples
 ```
 
 **Examples:**
 ```bash
 python main.py search
-python main.py search --location Remote --level senior
-python main.py search --hours-back 48 --job-type remote --results 20
-python main.py search --help           # see all flags
+python main.py search --location remote --level senior
+python main.py search --location "New York" --hours-back 48 --results 20
+python main.py search --help
 ```
 
 ---
 
-### Score jobs *(Phase 2 — coming soon)*
+### List jobs
+```bash
+python main.py jobs
+```
+Lists scored jobs ranked by fit score. Applied jobs are hidden by default so the list stays clean. Use `--search` to find a specific job by company or title without needing to remember its ID.
+
+**Options:**
+```
+--min-score INTEGER   Only show jobs at or above this fit score
+--limit INTEGER       Max jobs to show (default: 25)
+--search TEXT         Filter by keyword in job title or company. Case-insensitive.
+--unscored            Show only unscored jobs sorted by newest posted (find IDs for score --job-id)
+--applied             Show only jobs you have marked as applied (your application pipeline)
+--all                 Show every job in the database — scored, unscored, and applied
+```
+
+**Examples:**
+```bash
+python main.py jobs                        # scored jobs ranked by fit score
+python main.py jobs --search "stripe"      # find jobs at Stripe
+python main.py jobs --search "ML"          # find ML-related jobs
+python main.py jobs --min-score 7          # only high-fit jobs
+python main.py jobs --unscored             # unscored jobs sorted by newest posted
+python main.py jobs --applied              # your applied job pipeline
+python main.py jobs --all                  # every job in the database
+```
+
+---
+
+### Show full job details
+```bash
+python main.py show --job-id <id>
+```
+Shows complete details for a single job: fit score, ATS coverage, fit reasoning, hard gaps, soft gaps, and reframe suggestions. Find job IDs with `python main.py jobs` or `python main.py jobs --search "company"`.
+
+---
+
+### Mark a job as applied
+```bash
+python main.py mark-applied --job-id <id>
+```
+Marks a job as applied and hides it from the default `jobs` list. Applied jobs are still accessible with `python main.py jobs --applied`.
+
+**Example:**
+```bash
+python main.py mark-applied --job-id 12
+```
+
+---
+
+### Score jobs
 ```bash
 python main.py score
 ```
-Scores all unscored jobs using Claude — returns fit score (1–10), matching skills, missing skills, ATS keyword coverage, and gap analysis.
+Scores all unscored jobs using Claude — returns fit score (1–10), matching skills, missing skills, and reasoning. Results are saved to the DB and printed as a color-coded ranked table (green ≥7, yellow ≥5, red <5).
+
+By default scores all **unscored** jobs only. Already-scored jobs are skipped unless you use `--force`.
+
+**Options:**
+```
+--job-id INTEGER       Score one specific job by ID (find IDs with: python main.py jobs --unscored)
+--limit INTEGER        Max jobs to score in this run (good for testing a small batch first)
+--recent               Score most recently posted jobs first — fewest applicants, highest response rate
+--min-score INTEGER    Only display jobs at or above this score (all jobs still scored and saved)
+--show-reasoning       Print Claude's reasoning under each score
+--force                Re-score jobs that have already been scored
+--help                 Show all flags
+```
+
+**Examples:**
+```bash
+python main.py score                              # score all unscored jobs
+python main.py score --limit 5                   # score next 5 unscored jobs
+python main.py score --recent --limit 10         # score 10 most recently posted jobs
+python main.py score --recent --force --limit 10 # re-score 10 most recent jobs
+python main.py score --job-id 12                 # score one specific job
+python main.py score --force --job-id 12         # re-score an already-scored job
+python main.py score --min-score 7 --show-reasoning
+```
 
 ---
 

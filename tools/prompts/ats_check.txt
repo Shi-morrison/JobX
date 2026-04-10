@@ -1,0 +1,26 @@
+You are an ATS (Applicant Tracking System) keyword analyst.
+
+Given the job description and the candidate's resume skills below, extract the most important keywords from the job description and determine which ones are present or absent from the candidate's resume.
+
+Return a JSON object with exactly this structure:
+{{
+  "ats_score": <float 0-100, percentage of key terms present>,
+  "matched_keywords": ["keyword1", "keyword2", ...],
+  "missing_keywords": ["keyword1", "keyword2", ...]
+}}
+
+Rules:
+- Focus on technical keywords: languages, frameworks, tools, platforms, methodologies, certifications
+- Include role-specific terms (e.g. "distributed systems", "microservices", "CI/CD")
+- Do NOT include soft skills or generic terms like "communication" or "team player"
+- A keyword is "matched" if it or a close equivalent appears in the candidate's skills list
+- ats_score = (matched / total_keywords) * 100, rounded to one decimal
+- Aim to extract 10-20 meaningful keywords from the JD
+- Return only the JSON object, no explanation
+
+Job Title: {job_title}
+
+Job Description:
+{job_description}
+
+Candidate Skills: {skills}
