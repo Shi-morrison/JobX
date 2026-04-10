@@ -10,6 +10,9 @@ Candidate skills: {skills}
 Real LeetCode problems reported for this company:
 {leetcode_context}
 
+Interview questions reported by past candidates on Glassdoor:
+{glassdoor_context}
+
 Instructions:
 - Extract every distinct technology mentioned in the JD: languages, frameworks, databases, cloud platforms, tools, protocols
 - For each technology, generate 3–5 interview questions at the appropriate depth for this role
@@ -18,6 +21,7 @@ Instructions:
 - Vary difficulty: include one foundational question and at least one challenging one per technology
 - Only include technologies actually mentioned in the JD
 - If real LeetCode problems are provided above, reference the most relevant ones as a "LeetCode" entry in your output
+- If Glassdoor questions are provided above, incorporate them into the relevant technology sections or add a "Reported Questions" entry with the most commonly asked ones
 
 Return only valid JSON in this exact format:
 {

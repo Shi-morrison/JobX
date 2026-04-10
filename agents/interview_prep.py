@@ -8,6 +8,8 @@ from db.session import get_session
 from db.models import Job, InterviewPrep
 from tools.llm import ClaudeClient, load_prompt, parse_resume
 from tools.leetcode import fetch_company_problems
+from tools.glassdoor import fetch_glassdoor_interviews
+from tools.levelsfyi import fetch_levelsfyi_compensation
 from agents.scorer import _build_experience_summary
 
 console = Console()
@@ -69,26 +71,86 @@ def _format_leetcode_context(lc_result: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Task 3.5.1b — Glassdoor Interview Review Fetcher
+# ---------------------------------------------------------------------------
+
+def fetch_glassdoor_questions(company_name: str) -> dict:
+    """Fetch reported interview questions from Glassdoor for a company."""
+    return fetch_glassdoor_interviews(company_name, limit=20)
+
+
+def _format_glassdoor_context(gd_result: dict) -> str:
+    """Format Glassdoor questions into a readable string for the prompt."""
+    if not gd_result.get("found") or not gd_result.get("questions"):
+        return "No Glassdoor interview data found — generate questions based on JD and LeetCode data."
+
+    lines = [f"(reported by past candidates — {len(gd_result['questions'])} questions):"]
+    for q in gd_result["questions"]:
+        difficulty = f" [{q['difficulty']}]" if q.get("difficulty") else ""
+        outcome = f" — {q['outcome']}" if q.get("outcome") else ""
+        lines.append(f"  - {q['question']}{difficulty}{outcome}")
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Task 3.5.1c — levels.fyi Compensation Fetcher
+# ---------------------------------------------------------------------------
+
+def fetch_compensation_data(company_name: str) -> dict:
+    """Fetch salary/compensation data from levels.fyi for a company.
+
+    Note: levels.fyi removed their interview section. This fetches comp data
+    instead — useful context for offer evaluation and comp discussion rounds.
+    """
+    return fetch_levelsfyi_compensation(company_name)
+
+
+def _format_compensation_context(comp_result: dict) -> str:
+    """Format levels.fyi comp data into a readable string for prompts."""
+    if not comp_result.get("found"):
+        return "No levels.fyi compensation data found."
+
+    lines = ["(from levels.fyi — verified compensation data):"]
+    if comp_result.get("median_total_comp"):
+        lines.append(f"  Median total comp (all roles): {comp_result['median_total_comp']}")
+    if comp_result.get("software_engineer_median"):
+        lines.append(f"  Software Engineer median: {comp_result['software_engineer_median']}")
+    if comp_result.get("job_families"):
+        lines.append("  Top roles by compensation:")
+        for row in comp_result["job_families"][:6]:
+            lines.append(f"    - {row['role']}: {row['median']}")
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
 # Task 3.5.2 — Tech Stack Question Generator
 # ---------------------------------------------------------------------------
 
-def generate_technical_questions(job: Job, resume_data: dict, lc_result: dict | None = None) -> dict:
+def generate_technical_questions(
+    job: Job,
+    resume_data: dict,
+    lc_result: dict | None = None,
+    gd_result: dict | None = None,
+) -> dict:
     """Generate technical interview questions per technology mentioned in the JD.
 
-    Incorporates real LeetCode company problems if available to ground
-    questions in what this specific company actually asks.
+    Incorporates real LeetCode problems and Glassdoor reported questions when
+    available to ground the output in what this company actually asks.
 
     Args:
         job: The job being prepared for.
         resume_data: Parsed resume dict.
-        lc_result: Optional result from fetch_leetcode_problems(). If None,
-                   LeetCode context is omitted from the prompt.
+        lc_result: Optional result from fetch_leetcode_problems().
+        gd_result: Optional result from fetch_glassdoor_questions().
 
     Returns:
         Dict with technical_questions: {technology: [question, ...]}
     """
     leetcode_context = _format_leetcode_context(lc_result) if lc_result else (
         "No LeetCode data provided — generate questions based on JD technologies."
+    )
+    glassdoor_context = _format_glassdoor_context(gd_result) if gd_result else (
+        "No Glassdoor data provided — generate questions based on JD and LeetCode data."
     )
 
     prompt = load_prompt(
@@ -98,6 +160,7 @@ def generate_technical_questions(job: Job, resume_data: dict, lc_result: dict | 
         job_description=(job.description or "")[:3000],
         skills=", ".join(resume_data.get("skills", [])),
         leetcode_context=leetcode_context,
+        glassdoor_context=glassdoor_context,
     )
     client = ClaudeClient()
     return client.chat_json(
@@ -235,7 +298,7 @@ def run_prep(job_id: int, force: bool = False) -> None:
 
     # Step 1: Fetch real LeetCode problems for this company
     lc_result = None
-    with console.status(f"[1/5] Fetching LeetCode problems for {job.company}..."):
+    with console.status(f"[1/6] Fetching LeetCode problems for {job.company}..."):
         try:
             lc_result = fetch_leetcode_problems(job.company)
             if lc_result.get("found"):
@@ -253,32 +316,67 @@ def run_prep(job_id: int, force: bool = False) -> None:
         except Exception as e:
             console.print(f"[yellow]Warning: LeetCode fetch failed: {e}[/yellow]")
 
-    # Step 2: Technical questions (grounded in LeetCode data if available)
-    with console.status("[2/5] Generating technical questions..."):
+    # Step 2: Scrape Glassdoor interview reviews
+    gd_result = None
+    with console.status(f"[2/6] Scraping Glassdoor interview reviews for {job.company}..."):
         try:
-            technical = generate_technical_questions(job, resume_data, lc_result)
+            gd_result = fetch_glassdoor_questions(job.company)
+            if gd_result.get("found"):
+                count = len(gd_result["questions"])
+                console.print(
+                    f"  [green]✓[/green] Found {count} reported interview questions on Glassdoor"
+                )
+            else:
+                console.print(
+                    f"  [dim]✗ No Glassdoor data found for {job.company}[/dim]"
+                )
+        except Exception as e:
+            console.print(f"[yellow]Warning: Glassdoor scrape failed: {e}[/yellow]")
+
+    # Step 3: Fetch levels.fyi compensation data
+    comp_result = None
+    with console.status(f"[3/7] Fetching levels.fyi compensation data for {job.company}..."):
+        try:
+            comp_result = fetch_compensation_data(job.company)
+            if comp_result.get("found"):
+                median = comp_result.get("software_engineer_median") or comp_result.get("median_total_comp")
+                console.print(
+                    f"  [green]✓[/green] Found comp data "
+                    f"(SWE median: {median})"
+                )
+            else:
+                console.print(
+                    f"  [dim]✗ No levels.fyi data found for {job.company}[/dim]"
+                )
+        except Exception as e:
+            console.print(f"[yellow]Warning: levels.fyi fetch failed: {e}[/yellow]")
+
+    # Step 4: Technical questions (grounded in LeetCode + Glassdoor data)
+    with console.status("[4/7] Generating technical questions..."):
+        try:
+            technical = generate_technical_questions(job, resume_data, lc_result, gd_result)
         except Exception as e:
             console.print(f"[yellow]Warning: technical questions failed: {e}[/yellow]")
             technical = {"technical_questions": {}}
 
-    # Step 3: Behavioral questions
-    with console.status("[3/5] Generating behavioral questions..."):
+    # Step 5: Behavioral questions
+    with console.status("[5/7] Generating behavioral questions..."):
         try:
             behavioral = generate_behavioral_questions(job, resume_data)
         except Exception as e:
             console.print(f"[yellow]Warning: behavioral questions failed: {e}[/yellow]")
             behavioral = {"behavioral_questions": []}
 
-    # Step 4: Company-specific questions
-    with console.status("[4/5] Generating company-specific prep..."):
+    # Step 6: Company-specific questions
+    with console.status("[6/7] Generating company-specific prep..."):
         try:
             company = generate_company_questions(job, resume_data)
         except Exception as e:
             console.print(f"[yellow]Warning: company questions failed: {e}[/yellow]")
             company = {"company_questions": [], "why_us_talking_points": []}
 
-    # Step 5: Study plan
-    with console.status("[5/5] Generating study plan..."):
+    # Step 7: Study plan
+    with console.status("[7/7] Generating study plan..."):
         try:
             study = generate_study_plan(job, resume_data, gap_analysis)
         except Exception as e:
@@ -288,19 +386,33 @@ def run_prep(job_id: int, force: bool = False) -> None:
     # Persist to DB
     with get_session() as db:
         prep = _get_or_create_prep(db, job_id)
-        # Merge LeetCode raw problems into technical_questions under "LeetCode" key
+        # Merge real data into technical_questions
         tech_questions = technical.get("technical_questions", {})
         if lc_result and lc_result.get("found") and lc_result.get("problems"):
             tech_questions["LeetCode"] = [
                 f"{p['title']} ({p['difficulty']}) — {p['url']}"
                 for p in lc_result["problems"]
             ]
-        prep.technical_questions = tech_questions
-        prep.behavioral_questions = behavioral.get("behavioral_questions", [])
-        prep.company_questions = {
+        if gd_result and gd_result.get("found") and gd_result.get("questions"):
+            tech_questions["Glassdoor"] = [
+                q["question"] for q in gd_result["questions"]
+            ]
+
+        # Store comp data under company_questions for offer/negotiation context
+        company_q = {
             "questions": company.get("company_questions", []),
             "why_us": company.get("why_us_talking_points", []),
         }
+        if comp_result and comp_result.get("found"):
+            company_q["compensation"] = {
+                "median_total_comp": comp_result.get("median_total_comp", ""),
+                "software_engineer_median": comp_result.get("software_engineer_median", ""),
+                "job_families": comp_result.get("job_families", []),
+                "source": "levels.fyi",
+            }
+        prep.technical_questions = tech_questions
+        prep.behavioral_questions = behavioral.get("behavioral_questions", [])
+        prep.company_questions = company_q
         prep.study_plan = study.get("study_plan", [])
         if not prep.mock_sessions:
             prep.mock_sessions = []

@@ -69,6 +69,67 @@ def search(
 
 
 # ---------------------------------------------------------------------------
+# parse-resume
+# ---------------------------------------------------------------------------
+
+@app.command(name="parse-resume")
+def parse_resume_cmd(
+    force: bool = typer.Option(False, "--force", help="Re-parse even if cache exists. Run this after updating data/base_resume.docx."),
+):
+    """Parse your base resume and cache the result.
+
+    All agents (scorer, tailor, cover letter, prep) read from this cache.
+    Replace data/base_resume.docx, then run this with --force before re-scoring.
+
+    Examples:
+
+      python main.py parse-resume           # parse if no cache exists
+
+      python main.py parse-resume --force   # force re-parse after updating resume
+    """
+    from tools.llm import parse_resume
+    from rich.console import Console
+    _console = Console()
+
+    if not force:
+        from pathlib import Path
+        if Path("data/resume_parsed.json").exists():
+            _console.print("[yellow]Cache already exists. Use [bold]--force[/bold] to re-parse after updating your resume.[/yellow]")
+            return
+
+    with _console.status("Parsing resume..."):
+        result = parse_resume(force=True)
+
+    _console.print(f"[green]✓[/green] Resume parsed: [bold]{result.get('name', 'Unknown')}[/bold]")
+    _console.print(f"  Skills found: {len(result.get('skills', []))}")
+    _console.print(f"  Experience entries: {len(result.get('experience', []))}")
+    _console.print("[dim]Cached to data/resume_parsed.json. Re-score jobs with: python main.py score --force[/dim]")
+
+
+# ---------------------------------------------------------------------------
+# fetch-descriptions
+# ---------------------------------------------------------------------------
+
+@app.command(name="fetch-descriptions")
+def fetch_descriptions(
+    limit: int = typer.Option(None, "--limit", help="Max number of jobs to backfill. Defaults to all."),
+):
+    """Fetch missing descriptions for LinkedIn jobs scraped without one.
+
+    Hits LinkedIn's public job API for each job and stores the result.
+    Adds a 1-3s delay between requests to avoid rate limiting.
+
+    Examples:
+
+      python main.py fetch-descriptions            # backfill all missing
+
+      python main.py fetch-descriptions --limit 10 # backfill next 10
+    """
+    from tools.scraper import run_fetch_descriptions
+    run_fetch_descriptions(limit=limit)
+
+
+# ---------------------------------------------------------------------------
 # score
 # ---------------------------------------------------------------------------
 
@@ -143,7 +204,7 @@ def score(
 @app.command()
 def jobs(
     min_score: int = typer.Option(None, "--min-score", help="Only show jobs at or above this fit score."),
-    limit: int = typer.Option(25, "--limit", help="Max number of jobs to show. Default: 25."),
+    limit: int = typer.Option(25, "--limit", help="Max number of jobs to show (default 25). Ignored when --all is used."),
     unscored: bool = typer.Option(False, "--unscored", help="Show only jobs that have not been scored yet (use to find IDs for --job-id)."),
     all_jobs_flag: bool = typer.Option(False, "--all", help="Show all jobs — scored, unscored, and applied."),
     applied: bool = typer.Option(False, "--applied", help="Show only jobs you have marked as applied."),
@@ -211,7 +272,7 @@ def jobs(
                 Job.title.ilike(keyword) | Job.company.ilike(keyword)
             )
 
-        result = query.limit(limit).all()
+        result = (query.all() if all_jobs_flag else query.limit(limit).all())
 
     if not result:
         if applied:

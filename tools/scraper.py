@@ -1,4 +1,7 @@
 import json
+import re
+import time
+import random
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -100,6 +103,7 @@ def _scrape_one(
         "location": location,
         "results_wanted": results_per_query,
         "hours_old": hours_old,
+        "linkedin_fetch_description": True,
     }
     if location == "Remote":
         kwargs["is_remote"] = True
@@ -193,6 +197,110 @@ def _print_results(new_jobs: list[Job]) -> None:
 
     console.print(table)
     console.print("[dim]Run [bold]python main.py score[/bold] next to rank these by fit.[/dim]")
+
+
+# ---------------------------------------------------------------------------
+# Description backfill (for jobs scraped before linkedin_fetch_description)
+# ---------------------------------------------------------------------------
+
+_LINKEDIN_JOB_API = "https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{job_id}"
+
+_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/122.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+}
+
+
+def _extract_linkedin_job_id(url: str) -> str | None:
+    """Extract numeric job ID from a LinkedIn job URL."""
+    match = re.search(r"/(\d{10,})", url)
+    return match.group(1) if match else None
+
+
+def _fetch_linkedin_description(url: str) -> str:
+    """Fetch the description for a single LinkedIn job URL.
+
+    Uses LinkedIn's public jobs-guest API (no auth required).
+    Returns empty string on failure.
+    """
+    try:
+        import requests
+        from bs4 import BeautifulSoup
+    except ImportError:
+        return ""
+
+    job_id = _extract_linkedin_job_id(url)
+    if not job_id:
+        return ""
+
+    api_url = _LINKEDIN_JOB_API.format(job_id=job_id)
+    try:
+        resp = requests.get(api_url, headers=_HEADERS, timeout=10)
+        if resp.status_code != 200:
+            return ""
+        soup = BeautifulSoup(resp.text, "html.parser")
+        desc_div = soup.find("div", class_="description__text")
+        if desc_div:
+            return desc_div.get_text(separator="\n").strip()
+        # Fallback: grab any show-more-less-html block
+        fallback = soup.find("div", class_=re.compile(r"show-more-less-html"))
+        if fallback:
+            return fallback.get_text(separator="\n").strip()
+    except Exception:
+        pass
+    return ""
+
+
+def run_fetch_descriptions(limit: int | None = None) -> None:
+    """Backfill descriptions for jobs that were scraped without one.
+
+    Only processes LinkedIn jobs (Indeed descriptions are always present).
+    Adds a small random delay between requests to avoid rate limiting.
+    """
+    with get_session() as db:
+        query = db.query(Job).filter(
+            Job.source == "linkedin",
+            Job.fit_score.is_(None),
+            (Job.description.is_(None) | (Job.description == "") | (Job.description == "nan")),
+        )
+        if limit is not None:
+            query = query.limit(limit)
+        jobs = query.all()
+
+    if not jobs:
+        console.print("[yellow]No LinkedIn jobs missing descriptions.[/yellow]")
+        return
+
+    console.print(f"[dim]Fetching descriptions for {len(jobs)} LinkedIn jobs...[/dim]")
+    updated = 0
+    failed = 0
+
+    with get_session() as db:
+        for i, job in enumerate(jobs, 1):
+            console.print(f"  [{i}/{len(jobs)}] {job.title} @ {job.company}...", end=" ")
+            desc = _fetch_linkedin_description(job.url)
+            if desc:
+                db_job = db.query(Job).filter(Job.id == job.id).first()
+                if db_job:
+                    db_job.description = desc
+                console.print("[green]✓[/green]")
+                updated += 1
+            else:
+                console.print("[red]✗ no description found[/red]")
+                failed += 1
+
+            # Polite delay: 1–3 seconds between requests
+            if i < len(jobs):
+                time.sleep(random.uniform(1.0, 3.0))
+
+    console.print(f"\n[green]Updated {updated} jobs.[/green] {failed} could not be fetched.")
+    if updated:
+        console.print("[dim]Run [bold]python main.py score[/bold] to score the newly described jobs.[/dim]")
 
 
 # ---------------------------------------------------------------------------

@@ -250,9 +250,13 @@ JobX/
 - [x] `JD` column added to `jobs` table — green ✓ if job has a description, red ✗ if missing; makes it immediately clear which jobs can be scored/tailored
 - [x] `show` command detects missing ATS/reasoning data and tells you whether to re-score or explains the job has no description
 - [x] `jobs --recent` flag added — sorts by most recently posted instead of fit score, works across all modes (scored, applied, all)
+- [x] `jobs --all` bypasses the 25-item default limit — shows every job in the DB
+- [x] `python main.py parse-resume` command — exposes `force=True` via CLI so users can bust the resume cache after updating `data/base_resume.docx`
+- [x] `python main.py fetch-descriptions` command — backfills missing descriptions for LinkedIn jobs scraped before `linkedin_fetch_description=True` was added; hits LinkedIn's public jobs-guest API with 1–3s random delays
+- [x] `linkedin_fetch_description=True` added to `_scrape_one()` — all future LinkedIn scrapes include full descriptions
 
 **What was built:**
-The daily workflow is now: `search` → `score --recent --limit 10` → `jobs` → `jobs --search "company"` → `show --job-id X` → `mark-applied --job-id X`. Applied jobs are hidden automatically so the list stays focused. `--search` solves "I remember the company but can't find the ID" without needing a database UI.
+The daily workflow is now: `search` → `score --recent --limit 10` → `jobs` → `jobs --search "company"` → `show --job-id X` → `mark-applied --job-id X`. Applied jobs are hidden automatically so the list stays focused. `--search` solves "I remember the company but can't find the ID" without needing a database UI. `parse-resume --force` is the correct way to refresh the resume cache after updating your base resume — all downstream agents (scorer, tailor, cover letter, prep) read from this cache.
 
 ---
 
@@ -286,20 +290,18 @@ The daily workflow is now: `search` → `score --recent --limit 10` → `jobs` �
 
 ---
 
-### PHASE 3.5 — Interview Prep Agent ✅ COMPLETE — 13 tests passing
+### PHASE 3.5 — Interview Prep Agent ✅ COMPLETE — 41 tests passing
 **Goal:** Full interview preparation suite triggered once a job is worth pursuing.
 **Depends on:** Phase 2 (gap analyzer), Phase 3 (application prep)
 
-#### Task 3.5.1 — Real Interview Data (LeetCode + Glassdoor + levels.fyi) 🔜 NEXT
+#### Task 3.5.1 — Real Interview Data (LeetCode + Glassdoor + levels.fyi) ✅ COMPLETE
 **Goal:** Ground technical questions in real reported data instead of Claude inference. Three sources, each adds a different layer.
 
 **Why each source:**
-- **LeetCode** — company-tagged problems with difficulty and frequency data. Tells you *exactly* which coding problems a company has asked historically. Most reliable because it uses an unofficial GraphQL API (no auth, no scraping).
-- **Glassdoor** — past candidates write out the actual questions they were asked in interviews. Covers system design, behavioral, and technical. Requires Playwright + cookie/header handling to bypass soft auth wall.
-- **levels.fyi** — interview difficulty rating, process description (number of rounds, format), and sometimes specific questions. More scraping-friendly than Glassdoor.
+- **LeetCode** — company-tagged problems with difficulty and frequency data. Tells you *exactly* which coding problems a company has asked historically. Sourced from public GitHub dataset (663 companies, no auth).
+- **Glassdoor** — past candidates write out the actual questions they were asked in interviews. Covers system design, behavioral, and technical. Playwright scrapes what's visible before the login wall (typically 5–15 questions).
+- **levels.fyi** — originally planned for interview round data, but levels.fyi removed their interview section. Pivoted to comp data (salary, equity, total comp by role) which is useful for offer evaluation and comp discussion rounds.
 - **Blind** — skipped. Mobile-first app, requires hard auth, no public web endpoint worth scraping.
-
-**Sub-tasks:**
 
 ##### Task 3.5.1a — LeetCode Company Problem Fetcher ✅ COMPLETE
 - [x] `tools/leetcode.py` — fetches from `snehasishroy/leetcode-companywise-interview-questions` GitHub dataset (663 companies, no auth required)
@@ -308,36 +310,49 @@ The daily workflow is now: `search` → `score --recent --limit 10` → `jobs` �
 - [x] Returns top 20 problems sorted by frequency with title, difficulty, URL, frequency%, acceptance%
 - [x] Stored in `InterviewPrep.technical_questions["LeetCode"]` as formatted strings
 - [x] Passed to Claude as context so technical questions are grounded in real company-specific data
-- [x] `run_prep` updated to 5 steps: LeetCode fetch → technical → behavioral → company → study plan
 - [x] Fallback: if company not found, logs a dim message and Claude generates questions from JD only
-- [x] 12 pytest tests in `tests/test_leetcode.py` — all passing (79/79 total)
+- [x] 12 pytest tests in `tests/test_leetcode.py` — all passing
 
 **What was built:**
 `tools/leetcode.py` hits the GitHub raw content API to pull a company's CSV of LeetCode problems. The data is real — sourced from LeetCode Premium company tags and maintained publicly. Problems come with frequency scores (how often that company asks them), so the top-20 list is signal-ranked. Claude receives this as context when generating technical questions, so instead of guessing, it knows "Stripe most commonly asks Invalid Transactions, Two Sum, and Merge Intervals" and can reference them directly. Raw problems are also stored in the DB under the `LeetCode` key for use in mock interviews.
 
-##### Task 3.5.1b — Glassdoor Interview Review Scraper
-- [ ] In `tools/glassdoor.py`, use Playwright to scrape interview reviews for a company
-- [ ] URL pattern: `glassdoor.com/Interview/{company}-Interview-Questions-E{id}.htm`
-- [ ] Extract per review: question text, difficulty rating, interview outcome, date
-- [ ] Target 20–30 most recent reviews
-- [ ] Requires: realistic browser headers + short random delays between requests to avoid blocks
-- [ ] Store raw questions in `InterviewPrep.technical_questions` under `"Glassdoor"` key
-- [ ] Claude post-processes: deduplicates and categorizes questions by type (system design, coding, behavioral)
+##### Task 3.5.1b — Glassdoor Interview Review Scraper ✅ COMPLETE
+- [x] `tools/glassdoor.py` — Playwright scraper for Glassdoor interview questions
+- [x] `_find_employer_id()` resolves company name → Glassdoor employer ID via typeahead API
+- [x] `_scrape_page()` renders the page headlessly, dismisses cookie/login modals, extracts question cards
+- [x] Multiple CSS selector fallbacks — Glassdoor renames classes often, data-test attrs are more stable
+- [x] Extracts per question: question text, difficulty rating, interview outcome
+- [x] Stored in `InterviewPrep.technical_questions["Glassdoor"]`
+- [x] Passed to Claude as `{glassdoor_context}` in technical questions prompt
+- [x] Graceful fallback: returns `found: False` if blocked or company not found
+- [x] 15 pytest tests in `tests/test_glassdoor.py` — all passing
 
-##### Task 3.5.1c — levels.fyi Interview Data Scraper
-- [ ] In `tools/levelsfyi.py`, scrape `levels.fyi/company/{slug}/interview`
-- [ ] Extract: overall difficulty, interview rounds (phone screen / technical / system design / behavioral / onsite), reported questions
-- [ ] Store in `InterviewPrep.company_questions` as additional context alongside Claude-generated questions
-- [ ] More scraping-friendly than Glassdoor — standard requests + BeautifulSoup likely sufficient before reaching for Playwright
+**What was built:**
+`tools/glassdoor.py` first resolves the company's Glassdoor employer ID via the typeahead API (so the URL includes the numeric ID for reliability), then uses Playwright to render the JS-heavy interview page. Login/cookie popups are dismissed automatically. The scraper tries multiple selector patterns to handle Glassdoor's frequently changing class names. Typically extracts 5–15 questions visible before the login wall.
+
+##### Task 3.5.1c — levels.fyi Compensation Fetcher ✅ COMPLETE
+- [x] `tools/levelsfyi.py` — fetches salary/comp data from levels.fyi's public LLM-readable markdown endpoint
+- [x] `_company_slug()` normalizes company name to levels.fyi URL slug
+- [x] Fetches `https://www.levels.fyi/companies/{slug}/salaries.md` — no auth, no scraping
+- [x] Parses: median total comp, Software Engineer median, top 10 role medians
+- [x] Stored in `InterviewPrep.company_questions["compensation"]`
+- [x] `_format_compensation_context()` formats data for prompts
+- [x] 14 pytest tests in `tests/test_levelsfyi.py` — all passing
+- [x] **Pivot note:** levels.fyi removed their interview section. Comp data is what's available — useful for offer evaluation and discussing expectations during interviews.
+
+**What was built:**
+`tools/levelsfyi.py` uses levels.fyi's documented `.md` endpoint (they explicitly support LLM access via this format). No Playwright needed — plain `requests`. Parses markdown into structured comp data: median total comp, SWE median, and a breakdown by job family. Stored under `company_questions["compensation"]` so it's available during offer/negotiation discussions in mock interviews.
 
 **How it integrates into `prep run`:**
 ```
 python main.py prep run --job-id 12
-  → [1/5] Fetch LeetCode company problems    (real data)
-  → [2/5] Scrape Glassdoor interview reviews (real data)
-  → [3/5] Scrape levels.fyi interview info   (real data)
-  → [4/5] Generate questions with Claude     (uses real data as context + fills gaps)
-  → [5/5] Generate study plan, behavioral, company prep
+  → [1/7] Fetch LeetCode company problems     (real data — GitHub dataset)
+  → [2/7] Scrape Glassdoor interview reviews  (real data — Playwright)
+  → [3/7] Fetch levels.fyi compensation data  (real data — markdown API)
+  → [4/7] Generate technical questions        (Claude + LeetCode + Glassdoor context)
+  → [5/7] Generate behavioral questions       (Claude)
+  → [6/7] Generate company-specific prep      (Claude + comp data)
+  → [7/7] Generate study plan                 (Claude + gap analysis)
 ```
 Claude still runs but now has real data as context — so instead of guessing, it synthesizes and fills gaps around what was actually reported.
 
@@ -381,7 +396,7 @@ Claude still runs but now has real data as context — so instead of guessing, i
 - [x] 3 pytest tests — passing
 
 **What was built:**
-`agents/interview_prep.py` orchestrates the full prep pipeline. `python main.py prep run --job-id <id>` runs all 4 steps (technical → behavioral → company → study plan) in sequence, prints a summary, and saves everything to the `InterviewPrep` table. `python main.py prep mock --job-id <id>` launches an interactive CLI loop where Claude acts as the interviewer — each answer is scored and critiqued in real time. Sessions are saved for later review. Use `--force` to regenerate prep for a job you've updated.
+`agents/interview_prep.py` orchestrates the full prep pipeline. `python main.py prep run --job-id <id>` runs all 7 steps (LeetCode → Glassdoor → levels.fyi → technical → behavioral → company → study plan) in sequence, prints a summary, and saves everything to the `InterviewPrep` table. Real data from all three sources is passed as context to Claude so questions are grounded in what this company actually asks. `python main.py prep mock --job-id <id>` launches an interactive CLI loop where Claude acts as the interviewer — each answer is scored and critiqued in real time. Sessions are saved for later review. Use `--force` to regenerate prep for a job you've updated.
 
 ---
 

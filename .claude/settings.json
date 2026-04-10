@@ -16,7 +16,16 @@
       "Bash(curl -s \"https://api.github.com/repos/snehasishroy/leetcode-companywise-interview-questions/contents/robinhood\")",
       "Bash(python3 -c \"import json,sys; [print\\(f['name']\\) for f in json.load\\(sys.stdin\\)]\")",
       "Bash(curl -s \"https://raw.githubusercontent.com/snehasishroy/leetcode-companywise-interview-questions/master/google/three-months.csv\")",
-      "Bash(.venv/bin/pytest tests/test_leetcode.py -v)"
+      "Bash(.venv/bin/pytest tests/test_leetcode.py -v)",
+      "Bash(python -c ':*)",
+      "Bash(.venv/bin/python -c \"import inspect; from jobspy import scrape_jobs; print\\(inspect.signature\\(scrape_jobs\\)\\)\")",
+      "Bash(.venv/bin/python -c \"import bs4; print\\('bs4 available'\\)\")",
+      "Bash(.venv/bin/python -c \"from tools.scraper import run_fetch_descriptions, _extract_linkedin_job_id, _fetch_linkedin_description; print\\('imports ok'\\); print\\(_extract_linkedin_job_id\\('https://www.linkedin.com/jobs/view/software-engineer-at-google-3987654321'\\)\\)\")",
+      "Bash(.venv/bin/python -c ':*)",
+      "Bash(.venv/bin/pytest tests/test_glassdoor.py -v)",
+      "Bash(.venv/bin/pytest tests/test_levelsfyi.py -v)",
+      "Bash(.venv/bin/python main.py parse-resume --help)",
+      "Bash(.venv/bin/playwright install:*)"
     ]
   }
 }
