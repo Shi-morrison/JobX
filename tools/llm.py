@@ -30,6 +30,9 @@ def _get_client() -> anthropic.Anthropic:
 def load_prompt(template_name: str, **kwargs: Any) -> str:
     """Load a prompt template from tools/prompts/<template_name>.txt and fill in variables.
 
+    Uses simple {varname} substitution — only replaces variables passed as kwargs.
+    All other braces (e.g. JSON examples in prompts) are left untouched.
+
     Example:
         load_prompt("score_fit", job_title="Engineer", resume="...")
     """
@@ -37,7 +40,9 @@ def load_prompt(template_name: str, **kwargs: Any) -> str:
     if not path.exists():
         raise FileNotFoundError(f"Prompt template not found: {path}")
     template = path.read_text(encoding="utf-8")
-    return template.format(**kwargs)
+    for key, value in kwargs.items():
+        template = template.replace(f"{{{key}}}", str(value))
+    return template
 
 
 class ClaudeClient:

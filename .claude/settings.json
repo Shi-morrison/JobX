@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s \"https://alfa-leetcode-api.onrender.com/problems?limit=3\")",
+      "Bash(curl -s \"https://raw.githubusercontent.com/krishnadey30/LeetCode-Questions-CompanyWise/master/company_list.txt\")",
+      "Bash(curl -s \"https://raw.githubusercontent.com/hxu296/leetcode-company-wise-problems-2022/main/companies.json\")",
+      "Bash(curl -s \"https://api.github.com/repos/liquidslr/interview-company-wise-problems/contents\")",
+      "Bash(python3 -c \"import json,sys; [print\\(f['name'], f['type']\\) for f in json.load\\(sys.stdin\\)]\")",
+      "Bash(curl -s \"https://api.github.com/repos/snehasishroy/leetcode-companywise-interview-questions/contents\")",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(f['name'], f['type']\\) for f in d[:10]]\")",
+      "Bash(curl -s \"https://api.github.com/repos/snehasishroy/leetcode-companywise-interview-questions/contents/stripe\")",
+      "Bash(python3 -c \"import json,sys; [print\\(f['name'], f['download_url']\\) for f in json.load\\(sys.stdin\\)]\")",
+      "Bash(curl -s \"https://raw.githubusercontent.com/snehasishroy/leetcode-companywise-interview-questions/master/stripe/three-months.csv\")",
+      "Bash(curl -s \"https://raw.githubusercontent.com/snehasishroy/leetcode-companywise-interview-questions/master/stripe/six-months.csv\")",
+      "Bash(python3 -c \"import json,sys; dirs=[f['name'] for f in json.load\\(sys.stdin\\) if f['type']=='dir']; print\\(len\\(dirs\\), 'companies'\\); print\\(dirs[:15]\\)\")",
+      "Bash(curl -s \"https://api.github.com/repos/snehasishroy/leetcode-companywise-interview-questions/contents/robinhood\")",
+      "Bash(python3 -c \"import json,sys; [print\\(f['name']\\) for f in json.load\\(sys.stdin\\)]\")",
+      "Bash(curl -s \"https://raw.githubusercontent.com/snehasishroy/leetcode-companywise-interview-questions/master/google/three-months.csv\")",
+      "Bash(.venv/bin/pytest tests/test_leetcode.py -v)"
+    ]
+  }
+}

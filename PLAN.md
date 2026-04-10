@@ -169,10 +169,11 @@ JobX/
 - [x] Add prompt template loader — `load_prompt(template_name, **kwargs)` reads `.txt` files from `tools/prompts/` and substitutes `{variables}`
 - [x] Add retry logic — exponential backoff (1s, 2s, 4s) on rate limit and 5xx server errors, max 3 retries
 - [x] `chat_json()` strips markdown fences if Claude adds them anyway, retries once with a stricter nudge if JSON parse fails
+- [x] **Bug fix:** `load_prompt()` switched from `str.format(**kwargs)` to manual `str.replace()` — `str.format` treated every `{...}` in prompt files as a variable, breaking any prompt that included JSON examples. Now only named variables passed as kwargs are substituted.
 - [x] 10 pytest tests in `tests/test_llm.py` — all passing, no real API calls (mocked)
 
 **What was built:**
-`tools/llm.py` is the single entry point for all Claude API calls in the project. `ClaudeClient.chat()` returns a plain string. `chat_json()` appends a JSON instruction to the system prompt, strips any markdown fences from the response, and parses the result into a Python dict — if parsing fails it retries once with a clearer prompt. `load_prompt()` reads `.txt` template files from `tools/prompts/` and fills in `{variables}` like a string format. All agents in Phase 2+ will import `ClaudeClient` and `load_prompt` from here.
+`tools/llm.py` is the single entry point for all Claude API calls in the project. `ClaudeClient.chat()` returns a plain string. `chat_json()` appends a JSON instruction to the system prompt, strips any markdown fences from the response, and parses the result into a Python dict — if parsing fails it retries once with a clearer prompt. `load_prompt()` reads `.txt` template files from `tools/prompts/` and fills in `{variables}` using targeted string replacement — safe to include JSON examples directly in prompt files without escaping.
 
 #### Task 1.4 — Job Scraper ✅ COMPLETE
 - [x] Create `tools/scraper.py` wrapping JobSpy for LinkedIn, Indeed, Glassdoor
@@ -185,6 +186,8 @@ JobX/
 
 **What was built:**
 `tools/scraper.py` loops through every combination of `target_roles × target_locations` from `config.py`, calls JobSpy for each pair, then bulk-deduplicates the results against the `jobs` table before inserting. `data/scraper_state.json` records when the last scrape ran; on the next run it calculates how many hours have passed and only asks JobSpy for listings newer than that — so re-running `search` throughout the day won't pull the same jobs twice. Results are printed as a Rich table with title, company, source, and post date.
+
+**Bug fix — NaN descriptions stored as "nan":** JobSpy uses pandas internally. Missing description fields came back as `float('nan')`, which is truthy in Python, so `str(nan or "")` produced the literal string `"nan"` instead of empty string. Fixed with `_clean_str()` helper that explicitly checks `math.isnan()` before converting. Jobs without descriptions now store `""` and are excluded from scoring automatically.
 
 ---
 
@@ -244,67 +247,141 @@ JobX/
 - [x] `show` command now displays fit reasoning stored from scoring run
 - [x] Fit reasoning persisted to `gap_analysis` JSON field as `fit_reasoning` key so it survives DB across sessions
 - [x] Status column added to all `jobs` table views
+- [x] `JD` column added to `jobs` table — green ✓ if job has a description, red ✗ if missing; makes it immediately clear which jobs can be scored/tailored
+- [x] `show` command detects missing ATS/reasoning data and tells you whether to re-score or explains the job has no description
+- [x] `jobs --recent` flag added — sorts by most recently posted instead of fit score, works across all modes (scored, applied, all)
 
 **What was built:**
 The daily workflow is now: `search` → `score --recent --limit 10` → `jobs` → `jobs --search "company"` → `show --job-id X` → `mark-applied --job-id X`. Applied jobs are hidden automatically so the list stays focused. `--search` solves "I remember the company but can't find the ID" without needing a database UI.
 
 ---
 
-### PHASE 3 — Application Prep
+### PHASE 3 — Application Prep ✅ COMPLETE — 16 tests passing
 **Goal:** Generate tailored application materials per job.
 **Depends on:** Phase 2 complete
 
-#### Task 3.1 — Resume Tailor
-- [ ] In `agents/resume_tailor.py`, build `tailor_resume(job, resume_data, gap_analysis)`
-- [ ] Claude rewrites bullet points to match JD keywords using `reframe_suggestions` from gap analyzer
-- [ ] Save output as new `.docx` in `data/resume_versions/resume_{job_id}.docx`
-- [ ] Create `ResumeVersion` DB record linked to job
-- [ ] Never modify `data/base_resume.docx` — always work from a copy
+#### Task 3.1 — Resume Tailor ✅ COMPLETE
+- [x] `agents/resume_tailor.py` — `tailor_resume(job, resume_data, gap_analysis)` rewrites bullets using reframe_suggestions from gap analysis
+- [x] `_extract_bullets()` reads all bullet paragraphs from docx (skips short lines, all-caps headers)
+- [x] Claude returns exact original → rewritten mappings; replaced in a fresh copy via string matching on paragraph text
+- [x] Saved to `data/resume_versions/resume_{job_id}.docx` — base resume never modified
+- [x] `ResumeVersion` DB record created with file path and changes summary
+- [x] `python main.py tailor --job-id <id>` wired up, prints bullet count and changes summary
+- [x] 8 pytest tests — all passing
 
-#### Task 3.2 — Cover Letter Generator
-- [ ] In `agents/cover_letter.py`, build `generate_cover_letter(job, resume_data, company_research=None)`
-- [ ] Claude prompt includes: JD, user's background summary, company name, and optionally company research (Phase 4.1)
-- [ ] Save as `data/cover_letters/cover_letter_{job_id}.docx`
-- [ ] Note: cover letter gets richer once Phase 4.1 (company research) is built — design with that in mind
+**What was built:**
+`tailor_resume()` reads `data/base_resume.docx`, extracts all body paragraphs > 30 chars, and sends them to Claude along with the JD and reframe suggestions from the gap analyzer. Claude returns a list of `{original, rewritten}` pairs. These are matched back to the docx paragraphs by exact string and replaced in a copy — run formatting (bold, italic) is preserved. The result is saved as `data/resume_versions/resume_{job_id}.docx`. The base resume is never touched.
+
+#### Task 3.2 — Cover Letter Generator ✅ COMPLETE
+- [x] `agents/cover_letter.py` — `generate_cover_letter(job, resume_data, company_research=None)` generates a tailored cover letter
+- [x] Prompt includes: JD, skills, experience summary, hard gaps, soft gaps, and reframe suggestions
+- [x] `company_research` param reserved for Phase 4.1 — already in the signature so Phase 4 can enrich it without changing the interface
+- [x] `_write_docx()` builds formatted `.docx` with subject line header + paragraph body split on `\n\n`
+- [x] Saved to `data/cover_letters/cover_letter_{job_id}.docx`
+- [x] `python main.py cover-letter --job-id <id>` wired up, prints path, subject line, and word count
+- [x] 8 pytest tests — all passing (54/54 total)
+
+**What was built:**
+`generate_cover_letter()` builds a prompt with the full JD, candidate skills and experience summary, and the gap analysis output (hard gaps, soft gaps, reframe suggestions). Claude is instructed to write a direct 3–4 paragraph cover letter under 350 words — no generic openers, no filler phrases. The result is saved as a formatted `.docx` with proper margins and font sizing. Phase 4 company research will plug in via the `company_research` param to add company-specific talking points.
 
 ---
 
-### PHASE 3.5 — Interview Prep Agent (Expanded)
+### PHASE 3.5 — Interview Prep Agent ✅ COMPLETE — 13 tests passing
 **Goal:** Full interview preparation suite triggered once a job is worth pursuing.
 **Depends on:** Phase 2 (gap analyzer), Phase 3 (application prep)
 
-#### Task 3.5.1 — Glassdoor Interview Review Scraper
-- [ ] Use Playwright in `tools/browser.py` to scrape Glassdoor interview reviews for a given company
-- [ ] Extract: difficulty rating, interview format, common questions reported by candidates
-- [ ] Store raw reviews on `InterviewPrep` model
+#### Task 3.5.1 — Real Interview Data (LeetCode + Glassdoor + levels.fyi) 🔜 NEXT
+**Goal:** Ground technical questions in real reported data instead of Claude inference. Three sources, each adds a different layer.
 
-#### Task 3.5.2 — Tech Stack Question Generator
-- [ ] Claude reads JD and extracts all mentioned technologies (languages, frameworks, tools, cloud platforms)
-- [ ] For each technology, generate 3–5 targeted technical interview questions at the appropriate level
-- [ ] Store as structured JSON: `{ "Python": [...], "Kubernetes": [...] }`
+**Why each source:**
+- **LeetCode** — company-tagged problems with difficulty and frequency data. Tells you *exactly* which coding problems a company has asked historically. Most reliable because it uses an unofficial GraphQL API (no auth, no scraping).
+- **Glassdoor** — past candidates write out the actual questions they were asked in interviews. Covers system design, behavioral, and technical. Requires Playwright + cookie/header handling to bypass soft auth wall.
+- **levels.fyi** — interview difficulty rating, process description (number of rounds, format), and sometimes specific questions. More scraping-friendly than Glassdoor.
+- **Blind** — skipped. Mobile-first app, requires hard auth, no public web endpoint worth scraping.
 
-#### Task 3.5.3 — Behavioral Question Generator
-- [ ] Claude reads JD soft skill language ("collaborative", "takes ownership", "moves fast")
-- [ ] Maps each trait to STAR-format behavioral questions
-- [ ] Generate 8–10 behavioral questions with suggested answer frameworks
+**Sub-tasks:**
 
-#### Task 3.5.4 — Company-Specific Prep
-- [ ] Generate "why do you want to work here" talking points
-- [ ] Pull recent eng blog posts or company news (SerpAPI) for informed questions to ask the interviewer
-- [ ] Note: this step gets significantly richer once Phase 4.1 (company research agent) is complete
+##### Task 3.5.1a — LeetCode Company Problem Fetcher ✅ COMPLETE
+- [x] `tools/leetcode.py` — fetches from `snehasishroy/leetcode-companywise-interview-questions` GitHub dataset (663 companies, no auth required)
+- [x] `_company_slug()` normalizes company name to dataset slug (e.g. "Goldman Sachs" → "goldman-sachs", "J.P. Morgan" → "jp-morgan")
+- [x] Tries time windows in order: `three-months` → `six-months` → `all` (most recent data first)
+- [x] Returns top 20 problems sorted by frequency with title, difficulty, URL, frequency%, acceptance%
+- [x] Stored in `InterviewPrep.technical_questions["LeetCode"]` as formatted strings
+- [x] Passed to Claude as context so technical questions are grounded in real company-specific data
+- [x] `run_prep` updated to 5 steps: LeetCode fetch → technical → behavioral → company → study plan
+- [x] Fallback: if company not found, logs a dim message and Claude generates questions from JD only
+- [x] 12 pytest tests in `tests/test_leetcode.py` — all passing (79/79 total)
 
-#### Task 3.5.5 — Mock Interview CLI Mode
-- [ ] `python main.py prep mock --job-id <id>` launches an interactive CLI loop
-- [ ] Claude asks a question (rotates between technical, behavioral, company-specific)
-- [ ] User types their answer
-- [ ] Claude scores the answer (1–10) with specific critique and a suggested better answer
-- [ ] Session is saved to `InterviewPrep.mock_sessions` as JSON for later review
+**What was built:**
+`tools/leetcode.py` hits the GitHub raw content API to pull a company's CSV of LeetCode problems. The data is real — sourced from LeetCode Premium company tags and maintained publicly. Problems come with frequency scores (how often that company asks them), so the top-20 list is signal-ranked. Claude receives this as context when generating technical questions, so instead of guessing, it knows "Stripe most commonly asks Invalid Transactions, Two Sum, and Merge Intervals" and can reference them directly. Raw problems are also stored in the DB under the `LeetCode` key for use in mock interviews.
 
-#### Task 3.5.6 — Study Plan Generator
-- [ ] Reads `hard_gaps` from gap analyzer (Phase 2.4)
-- [ ] Claude generates a prioritized study plan: topic, resources (courses, docs, leetcode tags), estimated hours
-- [ ] Outputs as a readable CLI table and saves to `InterviewPrep` model
-- [ ] Ties into Phase 7.2 (interview outcome tracker) — if you fail on a topic, study plan updates
+##### Task 3.5.1b — Glassdoor Interview Review Scraper
+- [ ] In `tools/glassdoor.py`, use Playwright to scrape interview reviews for a company
+- [ ] URL pattern: `glassdoor.com/Interview/{company}-Interview-Questions-E{id}.htm`
+- [ ] Extract per review: question text, difficulty rating, interview outcome, date
+- [ ] Target 20–30 most recent reviews
+- [ ] Requires: realistic browser headers + short random delays between requests to avoid blocks
+- [ ] Store raw questions in `InterviewPrep.technical_questions` under `"Glassdoor"` key
+- [ ] Claude post-processes: deduplicates and categorizes questions by type (system design, coding, behavioral)
+
+##### Task 3.5.1c — levels.fyi Interview Data Scraper
+- [ ] In `tools/levelsfyi.py`, scrape `levels.fyi/company/{slug}/interview`
+- [ ] Extract: overall difficulty, interview rounds (phone screen / technical / system design / behavioral / onsite), reported questions
+- [ ] Store in `InterviewPrep.company_questions` as additional context alongside Claude-generated questions
+- [ ] More scraping-friendly than Glassdoor — standard requests + BeautifulSoup likely sufficient before reaching for Playwright
+
+**How it integrates into `prep run`:**
+```
+python main.py prep run --job-id 12
+  → [1/5] Fetch LeetCode company problems    (real data)
+  → [2/5] Scrape Glassdoor interview reviews (real data)
+  → [3/5] Scrape levels.fyi interview info   (real data)
+  → [4/5] Generate questions with Claude     (uses real data as context + fills gaps)
+  → [5/5] Generate study plan, behavioral, company prep
+```
+Claude still runs but now has real data as context — so instead of guessing, it synthesizes and fills gaps around what was actually reported.
+
+#### Task 3.5.2 — Tech Stack Question Generator ✅ COMPLETE
+- [x] `generate_technical_questions(job, resume_data)` in `agents/interview_prep.py`
+- [x] Claude extracts every technology from the JD and generates 3–5 questions per technology
+- [x] Questions vary in difficulty — one foundational, at least one challenging
+- [x] Stored as `{technology: [q1, q2, ...]}` in `InterviewPrep.technical_questions`
+- [x] 2 pytest tests — passing
+
+#### Task 3.5.3 — Behavioral Question Generator ✅ COMPLETE
+- [x] `generate_behavioral_questions(job, resume_data)` in `agents/interview_prep.py`
+- [x] Claude reads JD soft skill language and maps traits to STAR-format questions
+- [x] Each question includes trait label and suggested answer framework tied to candidate's real experience
+- [x] 8–10 questions stored in `InterviewPrep.behavioral_questions`
+- [x] 2 pytest tests — passing
+
+#### Task 3.5.4 — Company-Specific Prep ✅ COMPLETE
+- [x] `generate_company_questions(job, resume_data)` in `agents/interview_prep.py`
+- [x] Generates "why do you want to work here" talking points specific to this company and role
+- [x] Generates 5–7 smart questions to ask the interviewer with a talking point for each
+- [x] Stored in `InterviewPrep.company_questions` as `{questions: [...], why_us: [...]}`
+- [x] Phase 4 company research will enrich this automatically once built
+- [x] 2 pytest tests — passing
+
+#### Task 3.5.5 — Mock Interview CLI Mode ✅ COMPLETE
+- [x] `python main.py prep mock --job-id <id>` launches interactive CLI loop
+- [x] Questions interleave: 2 technical → 1 behavioral → 1 company, repeat
+- [x] User types answer; Claude scores 1–10 with specific critique and stronger answer example
+- [x] `skip` skips a question, `quit` ends the session
+- [x] Session saved to `InterviewPrep.mock_sessions` as `{timestamp, avg_score, qa_pairs}`
+- [x] 2 pytest tests — passing
+
+#### Task 3.5.6 — Study Plan Generator ✅ COMPLETE
+- [x] `generate_study_plan(job, resume_data, gap_analysis)` in `agents/interview_prep.py`
+- [x] Reads hard_gaps and soft_gaps from Phase 2.4 gap analysis
+- [x] Claude generates prioritized study plan: topic, specific resources, estimated hours, why it matters
+- [x] Skips Claude entirely if no gaps — saves API cost
+- [x] Displayed as a Rich table with priority color-coding (red=high, yellow=medium)
+- [x] Stored in `InterviewPrep.study_plan`
+- [x] 3 pytest tests — passing
+
+**What was built:**
+`agents/interview_prep.py` orchestrates the full prep pipeline. `python main.py prep run --job-id <id>` runs all 4 steps (technical → behavioral → company → study plan) in sequence, prints a summary, and saves everything to the `InterviewPrep` table. `python main.py prep mock --job-id <id>` launches an interactive CLI loop where Claude acts as the interviewer — each answer is scored and critiqued in real time. Sessions are saved for later review. Use `--force` to regenerate prep for a job you've updated.
 
 ---
 

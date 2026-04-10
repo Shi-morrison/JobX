@@ -1,0 +1,32 @@
+You are an expert cover letter writer for software engineering roles. Write a compelling, specific cover letter — not a generic template.
+
+Job: {job_title} at {company}
+
+Job Description:
+{job_description}
+
+Candidate background:
+Skills: {skills}
+Experience:
+{experience_summary}
+
+Gap analysis:
+Hard gaps: {hard_gaps}
+Soft gaps: {soft_gaps}
+Reframe suggestions: {reframe_suggestions}
+
+Instructions:
+- Opening paragraph: lead with the single most relevant thing about the candidate for THIS specific role — not a generic opener
+- Body (2 paragraphs): connect their actual experience to the JD's core requirements; use specific examples, not vague claims
+- If there are soft gaps, address one proactively in the body by reframing a real experience
+- Closing: confident and specific — reference the role by name, state clearly you want to move forward; avoid "I look forward to hearing from you"
+- Tone: direct and professional — not stiff, not casual
+- Length: 3–4 paragraphs, under 350 words total
+- Do NOT use: "I am writing to apply", "I am excited about the opportunity", "passionate about", "I believe I would be a great fit"
+
+Return only valid JSON in this exact format:
+{
+  "subject_line": "Application — {job_title} at {company}",
+  "body": "full cover letter text with \\n\\n between paragraphs",
+  "word_count": 0
+}

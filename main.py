@@ -148,16 +148,20 @@ def jobs(
     all_jobs_flag: bool = typer.Option(False, "--all", help="Show all jobs — scored, unscored, and applied."),
     applied: bool = typer.Option(False, "--applied", help="Show only jobs you have marked as applied."),
     search: str = typer.Option(None, "--search", help="Filter by keyword in job title or company name. Case-insensitive."),
+    recent: bool = typer.Option(False, "--recent", help="Sort by most recently posted first instead of fit score."),
 ):
     """List jobs ranked by fit score. Applied jobs are hidden by default.
 
     Use --unscored to find IDs of jobs not yet scored.
     Use --search to find a specific job by title or company.
     Use --applied to review your application pipeline.
+    Use --recent to sort by newest posted instead of fit score.
 
     Examples:
 
       python main.py jobs                        # scored jobs ranked by fit score
+
+      python main.py jobs --recent               # scored jobs sorted by newest posted
 
       python main.py jobs --search "stripe"      # find jobs at Stripe
 
@@ -178,7 +182,8 @@ def jobs(
     with get_session() as db:
         if applied:
             query = db.query(Job).filter(Job.status == "applied")
-            query = query.order_by(Job.fit_score.desc().nulls_last())
+            order = Job.posted_date.desc().nulls_last() if recent else Job.fit_score.desc().nulls_last()
+            query = query.order_by(order)
         elif unscored:
             query = db.query(Job).filter(
                 Job.fit_score.is_(None),
@@ -187,7 +192,8 @@ def jobs(
             query = query.order_by(Job.posted_date.desc().nulls_last())
         elif all_jobs_flag:
             query = db.query(Job)
-            query = query.order_by(Job.fit_score.desc().nulls_last())
+            order = Job.posted_date.desc().nulls_last() if recent else Job.fit_score.desc().nulls_last()
+            query = query.order_by(order)
         else:
             # Default: scored jobs that are not applied
             query = db.query(Job).filter(
@@ -196,7 +202,8 @@ def jobs(
             )
             if min_score:
                 query = query.filter(Job.fit_score >= min_score)
-            query = query.order_by(Job.fit_score.desc())
+            order = Job.posted_date.desc().nulls_last() if recent else Job.fit_score.desc()
+            query = query.order_by(order)
 
         if search:
             keyword = f"%{search}%"
@@ -233,6 +240,7 @@ def jobs(
     table.add_column("ID", style="dim", width=5)
     table.add_column("Fit", width=6, justify="center")
     table.add_column("ATS%", width=6, justify="center")
+    table.add_column("JD", width=4, justify="center")
     table.add_column("Title", style="bold")
     table.add_column("Company")
     table.add_column("Status", width=10)
@@ -247,10 +255,13 @@ def jobs(
         ats = f"{job.ats_score:.0f}%" if job.ats_score is not None else "—"
         posted = job.posted_date.strftime("%Y-%m-%d") if job.posted_date else "—"
         status_color = "blue" if job.status == "applied" else "dim"
+        has_desc = bool(job.description and job.description.strip() not in ("", "nan"))
+        jd_str = "[green]✓[/green]" if has_desc else "[red]✗[/red]"
         table.add_row(
             str(job.id),
             fit_str,
             ats,
+            jd_str,
             job.title,
             job.company,
             f"[{status_color}]{job.status or '—'}[/{status_color}]",
@@ -307,6 +318,17 @@ def show(
     console.print(f"\n[bold]Fit Score:[/bold]  {fit}    [bold]ATS Coverage:[/bold]  {ats}\n")
 
     gaps = job.gap_analysis or {}
+    has_description = job.description and job.description.strip() not in ("", "nan")
+
+    # Hint when scoring data is missing (scored before ATS/reasoning were added, or no description)
+    missing_ats = job.fit_score and job.ats_score is None
+    missing_reasoning = job.fit_score and not gaps.get("fit_reasoning")
+    if missing_ats or missing_reasoning:
+        if has_description:
+            console.print(f"[dim]Some scoring data is missing. Re-score to get full details: python main.py score --job-id {job_id} --force[/dim]")
+        else:
+            console.print(f"[dim]Some scoring data is missing. This job has no description — it cannot be re-scored.[/dim]")
+        console.print()
 
     if gaps.get("fit_reasoning"):
         console.print("[bold]Fit Reasoning:[/bold]")
@@ -332,9 +354,11 @@ def show(
             console.print(f"    → {s['suggestion']}")
         console.print()
 
-    if job.description:
-        console.print(f"[bold]Job Description Preview:[/bold]")
-        console.print(f"[dim]{job.description[:600]}...[/dim]")
+    if has_description:
+        console.print("[bold]Job Description Preview:[/bold]")
+        console.print(f"[dim]{job.description[:600]}{'...' if len(job.description) > 600 else ''}[/dim]")
+    else:
+        console.print("[dim]No job description available for this listing.[/dim]")
 
 
 # ---------------------------------------------------------------------------
@@ -374,6 +398,55 @@ def mark_applied(
 
 
 # ---------------------------------------------------------------------------
+# tailor
+# ---------------------------------------------------------------------------
+
+@app.command()
+def tailor(
+    job_id: int = typer.Option(..., "--job-id", help="Job ID to tailor the resume for. Must be scored first."),
+):
+    """Tailor your resume for a specific job using gap analysis reframe suggestions.
+
+    Reads data/base_resume.docx, rewrites relevant bullets to match the JD,
+    and saves the result to data/resume_versions/resume_<id>.docx.
+    Your base resume is never modified.
+
+    Requires the job to be scored first: python main.py score --job-id <id>
+    Find job IDs with: python main.py jobs
+
+    Example:
+
+      python main.py tailor --job-id 12
+    """
+    from agents.resume_tailor import run_tailor
+    run_tailor(job_id=job_id)
+
+
+# ---------------------------------------------------------------------------
+# cover-letter
+# ---------------------------------------------------------------------------
+
+@app.command(name="cover-letter")
+def cover_letter(
+    job_id: int = typer.Option(..., "--job-id", help="Job ID to generate a cover letter for. Must be scored first."),
+):
+    """Generate a tailored cover letter for a specific job.
+
+    Saves the cover letter to data/cover_letters/cover_letter_<id>.docx.
+    Uses gap analysis to address soft gaps and reframe your experience.
+
+    Requires the job to be scored first: python main.py score --job-id <id>
+    Find job IDs with: python main.py jobs
+
+    Example:
+
+      python main.py cover-letter --job-id 12
+    """
+    from agents.cover_letter import run_cover_letter
+    run_cover_letter(job_id=job_id)
+
+
+# ---------------------------------------------------------------------------
 # research
 # ---------------------------------------------------------------------------
 
@@ -401,15 +474,44 @@ def salary(
 # ---------------------------------------------------------------------------
 
 @prep_app.command("run")
-def prep_run(job_id: int = typer.Option(..., help="Job ID to prepare for")):
-    """Generate interview prep for a job."""
-    console.print(f"[yellow]Prep command for job {job_id} — coming in Phase 3.5.[/yellow]")
+def prep_run(
+    job_id: int = typer.Option(..., "--job-id", help="Job ID to generate interview prep for. Must be scored first."),
+    force: bool = typer.Option(False, "--force", help="Regenerate even if prep already exists."),
+):
+    """Generate full interview prep for a job: technical questions, behavioral questions,
+    company-specific talking points, and a study plan from gap analysis.
+
+    Requires the job to be scored first: python main.py score --job-id <id>
+    Find job IDs with: python main.py jobs
+
+    Examples:
+
+      python main.py prep run --job-id 12
+
+      python main.py prep run --job-id 12 --force
+    """
+    from agents.interview_prep import run_prep
+    run_prep(job_id=job_id, force=force)
 
 
 @prep_app.command("mock")
-def prep_mock(job_id: int = typer.Option(..., help="Job ID for mock interview")):
-    """Start an interactive mock interview session."""
-    console.print(f"[yellow]Mock interview for job {job_id} — coming in Phase 3.5.[/yellow]")
+def prep_mock(
+    job_id: int = typer.Option(..., "--job-id", help="Job ID to run a mock interview for."),
+):
+    """Run an interactive mock interview session for a job.
+
+    Claude asks questions rotating through technical, behavioral, and company-specific.
+    Score each answer 1-10 with specific critique and a suggested stronger answer.
+    Session is saved for later review.
+
+    Requires prep to be generated first: python main.py prep run --job-id <id>
+
+    Example:
+
+      python main.py prep mock --job-id 12
+    """
+    from agents.interview_prep import run_mock
+    run_mock(job_id=job_id)
 
 
 # ---------------------------------------------------------------------------

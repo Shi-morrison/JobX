@@ -13,8 +13,8 @@ Built with Python, Claude AI, SQLite, and Playwright.
 | 1 | Job scraping (LinkedIn + Indeed) | ✅ Live |
 | 2 | Resume parsing + fit scoring + ATS check + gap analysis | ✅ Live |
 | 2.5 | Job lifecycle: search, filter, mark-applied, applied pipeline | ✅ Live |
-| 3 | Resume tailoring + cover letter generation | Planned |
-| 3.5 | Interview prep (questions, mock sessions, study plan) | Planned |
+| 3 | Resume tailoring + cover letter generation | ✅ Live |
+| 3.5 | Interview prep (questions, mock sessions, study plan) | ✅ Live |
 | 4 | Company research + salary intelligence + hiring signals | Planned |
 | 5 | Contact finding + outreach sequences | Planned |
 | 6 | Auto-application (Greenhouse, Lever, Workday, LinkedIn) | Planned |
@@ -110,11 +110,14 @@ python main.py jobs
 ```
 Lists scored jobs ranked by fit score. Applied jobs are hidden by default so the list stays clean. Use `--search` to find a specific job by company or title without needing to remember its ID.
 
+The table includes a `JD` column: `✓` means the job has a description (can be scored and tailored), `✗` means no description was scraped (scoring won't work for that listing).
+
 **Options:**
 ```
 --min-score INTEGER   Only show jobs at or above this fit score
 --limit INTEGER       Max jobs to show (default: 25)
 --search TEXT         Filter by keyword in job title or company. Case-insensitive.
+--recent              Sort by most recently posted first instead of fit score
 --unscored            Show only unscored jobs sorted by newest posted (find IDs for score --job-id)
 --applied             Show only jobs you have marked as applied (your application pipeline)
 --all                 Show every job in the database — scored, unscored, and applied
@@ -123,6 +126,7 @@ Lists scored jobs ranked by fit score. Applied jobs are hidden by default so the
 **Examples:**
 ```bash
 python main.py jobs                        # scored jobs ranked by fit score
+python main.py jobs --recent               # scored jobs sorted by newest posted
 python main.py jobs --search "stripe"      # find jobs at Stripe
 python main.py jobs --search "ML"          # find ML-related jobs
 python main.py jobs --min-score 7          # only high-fit jobs
@@ -200,10 +204,74 @@ python main.py salary --company "Stripe" --level senior
 
 ---
 
-### Interview prep *(Phase 3.5 — planned)*
+### Tailor your resume
 ```bash
-python main.py prep run --job-id 5
-python main.py prep mock --job-id 5
+python main.py tailor --job-id <id>
+```
+Rewrites your resume bullets to match a specific job's requirements using the gap analysis reframe suggestions from scoring. Saves to `data/resume_versions/resume_<id>.docx`. Your base resume at `data/base_resume.docx` is never modified.
+
+Requires the job to be scored first: `python main.py score --job-id <id>`
+
+**Example:**
+```bash
+python main.py tailor --job-id 12
+```
+
+---
+
+### Generate a cover letter
+```bash
+python main.py cover-letter --job-id <id>
+```
+Generates a tailored cover letter using your experience, the job description, and gap analysis. Saves to `data/cover_letters/cover_letter_<id>.docx`. Outputs a subject line and word count.
+
+Requires the job to be scored first: `python main.py score --job-id <id>`
+
+**Example:**
+```bash
+python main.py cover-letter --job-id 12
+```
+
+---
+
+### Interview prep
+```bash
+python main.py prep run --job-id <id>
+```
+Generates full interview prep for a job in 5 steps:
+1. **LeetCode problems** — fetches real company-tagged problems sorted by frequency (663 companies supported). Falls back to Claude if company not in dataset.
+2. **Technical questions** — Claude generates questions per JD technology, grounded in real LeetCode data
+3. **Behavioral questions** — STAR-format questions mapped to JD soft skill signals
+4. **Company prep** — "why us" talking points and smart questions to ask the interviewer
+5. **Study plan** — prioritized topics from gap analysis with specific resources and estimated hours
+
+Requires the job to be scored first: `python main.py score --job-id <id>`
+
+**Options:**
+```
+--job-id INTEGER   Job ID to prepare for (required)
+--force            Regenerate even if prep already exists
+```
+
+**Examples:**
+```bash
+python main.py prep run --job-id 12
+python main.py prep run --job-id 12 --force
+```
+
+---
+
+### Mock interview
+```bash
+python main.py prep mock --job-id <id>
+```
+Runs an interactive mock interview session. Claude acts as the interviewer — questions rotate through technical, behavioral, and company-specific. Type your answer, get scored 1–10 with specific critique and a stronger example answer. Type `skip` to skip a question, `quit` to end the session. Sessions are saved for later review.
+
+Requires prep to be generated first: `python main.py prep run --job-id <id>`
+
+**Example:**
+```bash
+python main.py prep mock --job-id 12
 ```
 
 ---

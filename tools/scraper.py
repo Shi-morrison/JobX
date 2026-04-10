@@ -26,6 +26,23 @@ _LEVEL_KEYWORDS = {
 }
 
 
+def _clean_str(value) -> str:
+    """Convert a scraped field to a clean string, returning empty string for missing/NaN values.
+
+    JobSpy uses pandas internally — missing fields come back as float('nan'), which is
+    truthy in Python, so `str(nan or "")` produces the literal string "nan" instead of "".
+    """
+    if value is None:
+        return ""
+    try:
+        import math
+        if isinstance(value, float) and math.isnan(value):
+            return ""
+    except (TypeError, ValueError):
+        pass
+    return str(value).strip()
+
+
 # ---------------------------------------------------------------------------
 # State helpers
 # ---------------------------------------------------------------------------
@@ -117,7 +134,7 @@ def _scrape_one(
             "title": title,
             "company": company,
             "url": url,
-            "description": str(row.get("description") or ""),
+            "description": _clean_str(row.get("description")),
             "source": str(row.get("site") or ""),
             "posted_date": posted_date,
         })
