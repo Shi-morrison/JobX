@@ -19,6 +19,7 @@ class Job(Base):
     url = Column(String, unique=True, nullable=False)
     description = Column(Text)
     source = Column(String)           # linkedin / indeed / glassdoor
+    location = Column(String)         # e.g. "Remote", "New York", "San Francisco"
     posted_date = Column(DateTime)
     fit_score = Column(Float)         # 1–10, set by scorer agent
     ats_score = Column(Float)         # 0–100%, set by scorer agent

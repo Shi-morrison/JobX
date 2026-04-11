@@ -9,24 +9,37 @@ st.title("📋 Jobs")
 # Filters
 # ---------------------------------------------------------------------------
 
-col1, col2, col3, col4, col5 = st.columns([2, 1, 1, 1, 1])
-search_kw = col1.text_input("Search", placeholder="company or title...")
-min_score = col2.slider("Min fit score", 1, 10, 1)
-status_filter = col3.selectbox("Status", ["scored", "unscored", "applied", "all"])
-sort_by = col4.selectbox("Sort by", ["fit score", "date posted"])
-limit = col5.selectbox("Show", [25, 50, 100], index=0)
+row1 = st.columns([2, 1, 1, 1, 1])
+search_kw   = row1[0].text_input("Search", placeholder="company or title...")
+min_score   = row1[1].slider("Min fit score", 1, 10, 1)
+status_filter = row1[2].selectbox("Status", ["scored", "unscored", "applied", "all"])
+sort_by     = row1[3].selectbox("Sort by", ["fit score", "date posted"])
+limit       = row1[4].selectbox("Show", [25, 50, 100], index=0)
+
+row2 = st.columns([2, 2])
+location_filter = row2[0].text_input("Location", placeholder="remote / New York / San Francisco...")
+posted_filter   = row2[1].selectbox("Posted within", ["any time", "last 24h", "last 3 days", "last week", "last 2 weeks", "last month"])
 
 # ---------------------------------------------------------------------------
 # Load jobs
 # ---------------------------------------------------------------------------
 
 @st.cache_data(ttl=30)
-def load_jobs(search, min_sc, status, sort, lim):
+def load_jobs(search, min_sc, status, sort, lim, location, posted):
+    from datetime import datetime, timedelta
     from db.session import get_session
     from db.models import Job
     from agents.hiring_signals import get_surge_companies_set
 
     surge_set = get_surge_companies_set()
+
+    posted_cutoffs = {
+        "last 24h":    timedelta(days=1),
+        "last 3 days": timedelta(days=3),
+        "last week":   timedelta(weeks=1),
+        "last 2 weeks": timedelta(weeks=2),
+        "last month":  timedelta(days=30),
+    }
 
     with get_session() as db:
         query = db.query(Job)
@@ -46,6 +59,13 @@ def load_jobs(search, min_sc, status, sort, lim):
             from sqlalchemy import or_
             query = query.filter(or_(Job.title.ilike(kw), Job.company.ilike(kw)))
 
+        if location:
+            query = query.filter(Job.location.ilike(f"%{location}%"))
+
+        if posted != "any time" and posted in posted_cutoffs:
+            cutoff = datetime.utcnow() - posted_cutoffs[posted]
+            query = query.filter(Job.posted_date >= cutoff)
+
         if sort == "date posted":
             query = query.order_by(Job.posted_date.desc().nulls_last())
         else:
@@ -57,7 +77,7 @@ def load_jobs(search, min_sc, status, sort, lim):
 
 
 try:
-    jobs, surge_set = load_jobs(search_kw, min_score, status_filter, sort_by, limit)
+    jobs, surge_set = load_jobs(search_kw, min_score, status_filter, sort_by, limit, location_filter, posted_filter)
 except Exception as e:
     st.error(f"Could not load jobs: {e}")
     st.stop()
@@ -79,13 +99,15 @@ for job in jobs:
     posted = job.posted_date.strftime("%b %d") if job.posted_date else "—"
     has_desc = bool(job.description and job.description.strip() not in ("", "nan"))
 
-    label = f"{score_icon} **{score_str}** — {job.title} @ **{job.company}**{surge_icon}  `ID {job.id}` · {posted}"
+    loc_str = f" · 📍 {job.location}" if job.location else ""
+    label = f"{score_icon} **{score_str}** — {job.title} @ **{job.company}**{surge_icon}  `ID {job.id}` · {posted}{loc_str}"
 
     with st.expander(label):
-        dc1, dc2, dc3 = st.columns(3)
+        dc1, dc2, dc3, dc4 = st.columns(4)
         dc1.markdown(f"**Fit Score:** {score_str}")
         dc2.markdown(f"**ATS:** {f'{job.ats_score:.0f}%' if job.ats_score else '—'}")
         dc3.markdown(f"**Status:** {job.status or '—'}")
+        dc4.markdown(f"**Location:** {job.location or '—'}")
 
         if job.url:
             st.markdown(f"[Open job posting ↗]({job.url})")

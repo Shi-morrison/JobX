@@ -134,6 +134,9 @@ def _scrape_one(
         except Exception:
             posted_date = None
 
+        # JobSpy returns a 'location' column — prefer it, fall back to the
+        # search location so every job has a value.
+        raw_loc = _clean_str(row.get("location")) or location
         jobs.append({
             "title": title,
             "company": company,
@@ -141,6 +144,7 @@ def _scrape_one(
             "description": _clean_str(row.get("description")),
             "source": str(row.get("site") or ""),
             "posted_date": posted_date,
+            "location": raw_loc,
         })
 
     return jobs
@@ -170,6 +174,7 @@ def _insert_new_jobs(jobs: list[dict]) -> list[Job]:
                 url=j["url"],
                 description=j["description"],
                 source=j["source"],
+                location=j.get("location"),
                 posted_date=j["posted_date"],
                 status="new",
             )
