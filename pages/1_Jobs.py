@@ -9,18 +9,19 @@ st.title("📋 Jobs")
 # Filters
 # ---------------------------------------------------------------------------
 
-col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
+col1, col2, col3, col4, col5 = st.columns([2, 1, 1, 1, 1])
 search_kw = col1.text_input("Search", placeholder="company or title...")
 min_score = col2.slider("Min fit score", 1, 10, 1)
 status_filter = col3.selectbox("Status", ["scored", "unscored", "applied", "all"])
 sort_by = col4.selectbox("Sort by", ["fit score", "date posted"])
+limit = col5.selectbox("Show", [25, 50, 100], index=0)
 
 # ---------------------------------------------------------------------------
 # Load jobs
 # ---------------------------------------------------------------------------
 
 @st.cache_data(ttl=30)
-def load_jobs(search, min_sc, status, sort):
+def load_jobs(search, min_sc, status, sort, lim):
     from db.session import get_session
     from db.models import Job
     from agents.hiring_signals import get_surge_companies_set
@@ -50,13 +51,13 @@ def load_jobs(search, min_sc, status, sort):
         else:
             query = query.order_by(Job.fit_score.desc().nulls_last())
 
-        jobs = query.limit(100).all()
+        jobs = query.limit(lim).all()
 
     return jobs, surge_set
 
 
 try:
-    jobs, surge_set = load_jobs(search_kw, min_score, status_filter, sort_by)
+    jobs, surge_set = load_jobs(search_kw, min_score, status_filter, sort_by, limit)
 except Exception as e:
     st.error(f"Could not load jobs: {e}")
     st.stop()
