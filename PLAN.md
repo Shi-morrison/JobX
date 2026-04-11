@@ -335,7 +335,7 @@ The daily workflow is now: `search` → `score --recent --limit 10` → `jobs` �
 - [x] Returns top 20 problems sorted by frequency with title, difficulty, URL, frequency%, acceptance%
 - [x] Stored in `InterviewPrep.technical_questions["LeetCode"]` as formatted strings
 - [x] Passed to Claude as context so technical questions are grounded in real company-specific data
-- [x] Fallback: if company not found, logs a dim message and Claude generates questions from JD only
+- [x] Fallback: if company not in dataset, `fetch_top_problems()` aggregates across Amazon/Google/Meta/Microsoft — deduplicates by title, ranks by cross-company frequency. Claude is told these are general problems, not company-specific.
 - [x] 12 pytest tests in `tests/test_leetcode.py` — all passing
 
 **What was built:**
@@ -542,11 +542,13 @@ Claude still runs but now has real data as context — so instead of guessing, i
 - [x] `pages/1_Jobs.py` — filter by score/status/keyword, expand for full gap analysis
 - [x] One-click navigate to Pipeline, Research, Prep for any job
 - [x] Mark applied directly from job card
+- [x] Pagination selector (25/50/100) — default 25 for fast load
 
 #### Task 8.3 — Pipeline Orchestrator ✅ COMPLETE
 - [x] `pages/2_Pipeline.py` — select job, run all 5 steps with progress, download outputs
 - [x] In-page display of salary intel and company summary after run
 - [x] Dry-run and submit autofill buttons
+- [x] "Next Steps" nav links (Prep / Research / Outreach / Jobs) shown after pipeline completes
 
 #### Task 8.4 — Company Research ✅ COMPLETE
 - [x] `pages/3_Research.py` — research form, cached results browser, salary lookup
@@ -554,6 +556,7 @@ Claude still runs but now has real data as context — so instead of guessing, i
 #### Task 8.5 — Interview Prep ✅ COMPLETE
 - [x] `pages/4_Prep.py` — tabbed view of technical/behavioral/company questions/study plan
 - [x] In-browser mock interview with Claude scoring
+- [x] Fixed: `star_framework` renders correctly whether Claude returns a dict or plain string
 
 #### Task 8.6 — Outreach ✅ COMPLETE
 - [x] `pages/5_Outreach.py` — generate messages, view content, manage follow-ups, all contacts
@@ -563,6 +566,7 @@ Claude still runs but now has real data as context — so instead of guessing, i
 
 #### Task 8.8 — Settings ✅ COMPLETE
 - [x] `pages/7_Settings.py` — resume upload/parse, search/score controls, API key status, DB download
+- [x] Min Target Comp and Min Fit Score editable from UI — saved back to `.env`
 
 **How to run:**
 ```bash

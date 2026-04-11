@@ -148,3 +148,73 @@ def fetch_company_problems(
             }
 
     return {"found": False, "company_slug": slug, "window": None, "problems": []}
+
+
+# ---------------------------------------------------------------------------
+# Generic fallback — top problems across major tech companies
+# ---------------------------------------------------------------------------
+
+# Companies used to build the generic fallback — broad, well-maintained datasets
+_FALLBACK_COMPANIES = ["amazon", "google", "meta", "microsoft"]
+
+
+def fetch_top_problems(limit: int = 20) -> dict:
+    """Return a frequency-ranked list of commonly asked problems aggregated
+    across major tech companies. Used as fallback when a company isn't in the
+    dataset.
+
+    Merges each company's 'all' window, deduplicates by title, and ranks by
+    how many companies asked the problem and their average frequency.
+
+    Returns same shape as fetch_company_problems().
+    """
+    scores: dict[str, dict] = {}  # title -> {problem dict, total_freq, count}
+
+    for slug in _FALLBACK_COMPANIES:
+        rows = _fetch_csv(slug, "all")
+        if not rows:
+            continue
+        for row in rows:
+            title = row.get("Title", "").strip()
+            if not title:
+                continue
+            try:
+                freq = float(row.get("Frequency %", "0").replace("%", ""))
+                acc = float(row.get("Acceptance %", "0").replace("%", ""))
+            except ValueError:
+                freq, acc = 0.0, 0.0
+
+            if title in scores:
+                scores[title]["total_freq"] += freq
+                scores[title]["count"] += 1
+            else:
+                scores[title] = {
+                    "problem": {
+                        "title": title,
+                        "difficulty": row.get("Difficulty", "").strip(),
+                        "url": row.get("URL", "").strip(),
+                        "frequency": round(freq, 1),
+                        "acceptance": round(acc, 1),
+                    },
+                    "total_freq": freq,
+                    "count": 1,
+                }
+
+    if not scores:
+        return {"found": False, "company_slug": "fallback", "window": "all", "problems": []}
+
+    # Problems asked by more companies and with higher average frequency rank higher
+    ranked = sorted(
+        scores.values(),
+        key=lambda x: (x["count"], x["total_freq"] / x["count"]),
+        reverse=True,
+    )
+
+    problems = [entry["problem"] for entry in ranked[:limit]]
+    return {
+        "found": True,
+        "company_slug": "fallback",
+        "window": "all",
+        "problems": problems,
+        "is_fallback": True,
+    }

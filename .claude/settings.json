@@ -38,7 +38,9 @@
       "Read(//home/creamshi/**)",
       "Bash(echo '')",
       "Bash(echo '# JobX CLI')",
-      "Bash(echo 'alias jobx=\"/home/creamshi/Projects/JobX/.venv/bin/jobx\"')"
+      "Bash(echo 'alias jobx=\"/home/creamshi/Projects/JobX/.venv/bin/jobx\"')",
+      "Bash(python3 -c \"import sys,json; [print\\(e['name']\\) for e in json.load\\(sys.stdin\\) if e['type']=='dir']\")",
+      "Bash(curl -s \"https://raw.githubusercontent.com/snehasishroy/leetcode-companywise-interview-questions/master/amazon/three-months.csv\")"
     ],
     "additionalDirectories": [
       "/home/creamshi"

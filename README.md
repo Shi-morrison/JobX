@@ -114,23 +114,20 @@ python main.py db init
 python main.py parse-resume
 ```
 
-**7. (Optional) Add shell aliases so you don't need `python main.py` every time:**
+**7. Install the `jobx` CLI shortcut:**
+```bash
+pip install -e .
+```
+This registers `jobx` as a command in the venv so you don't need `python main.py` every time.
 
-Add these to your `~/.bashrc` or `~/.zshrc`:
+**8. (Optional) Make `jobx` and `jobx-ui` available without activating the venv:**
+
+Add to `~/.bashrc` or `~/.zshrc`:
 ```bash
 alias jobx="/path/to/JobX/.venv/bin/jobx"
 alias jobx-ui="/path/to/JobX/.venv/bin/streamlit run /path/to/JobX/Home.py"
 ```
-Then `source ~/.bashrc`. After that:
-```bash
-jobx digest       # instead of: python main.py digest
-jobx-ui           # instead of: streamlit run Home.py
-```
-
-Or install the CLI into the venv directly (already done if you're reading this after setup):
-```bash
-pip install -e .
-```
+Then `source ~/.bashrc`. New terminals will pick it up automatically.
 Sends your resume to Claude once and caches the result. All scoring, tailoring, and prep reads from this cache. Re-run with `--force` after updating your resume.
 
 ---
@@ -169,13 +166,13 @@ streamlit run Home.py   # or: jobx-ui (if alias is set up)
 | Page | What you do there |
 |---|---|
 | 🏠 Home | Daily digest — pipeline metrics, new jobs, follow-ups due, hiring surges, study plan |
-| 📋 Jobs | Browse and filter jobs, read gap analysis, one-click navigate to Pipeline/Prep/Research |
-| 🚀 Pipeline | Select a job and run all 5 steps (research → tailor → cover letter → prep → salary) with progress bar. Downloads and apply buttons at the end. |
+| 📋 Jobs | Browse and filter jobs by score/status/keyword. Pagination (25/50/100). Read gap analysis, one-click navigate to Pipeline/Prep/Research. |
+| 🚀 Pipeline | Select a job and run all 5 steps (research → tailor → cover letter → prep → salary) with progress bar. Downloads, salary display, and clickable next-step links at the end. |
 | 🏢 Research | Research a company, browse cached results, look up salary intel |
 | 📚 Prep | Read technical/behavioral/company questions, study plan, and run a mock interview with Claude scoring |
 | 📨 Outreach | Generate messages for contacts, view message content, manage follow-ups, see all contacts |
 | 📊 Analytics | Pipeline stats, charts, Claude pattern analysis, log interview outcomes |
-| ⚙️ Settings | Upload/re-parse resume, run search/score, check API key status, download DB |
+| ⚙️ Settings | Upload/re-parse resume, edit min comp + fit score (saved to `.env`), run search/score, check API key status, download DB |
 
 **Note:** Long-running operations (scoring, prep, pipeline) block the browser tab while running — progress is shown in the terminal. For personal use this is acceptable.
 
@@ -467,7 +464,7 @@ python main.py prep run --job-id <id>
 
 Generates full interview prep in 7 steps:
 
-1. **LeetCode problems** — real company-tagged problems from a public dataset (663 companies), sorted by frequency
+1. **LeetCode problems** — real company-tagged problems from a public dataset (663 companies), sorted by frequency. If the company isn't in the dataset, falls back to the top problems aggregated across Amazon/Google/Meta/Microsoft ranked by cross-company frequency.
 2. **Glassdoor reviews** — Playwright-scraped interview questions reported by candidates
 3. **levels.fyi comp data** — salary benchmarks for offer context
 4. **Technical questions** — Claude generates questions per JD technology, grounded in LeetCode + Glassdoor data

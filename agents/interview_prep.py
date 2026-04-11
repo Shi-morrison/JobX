@@ -7,7 +7,7 @@ from rich.panel import Panel
 from db.session import get_session
 from db.models import Job, InterviewPrep
 from tools.llm import ClaudeClient, load_prompt, parse_resume
-from tools.leetcode import fetch_company_problems
+from tools.leetcode import fetch_company_problems, fetch_top_problems
 from tools.glassdoor import fetch_glassdoor_interviews
 from tools.levelsfyi import fetch_levelsfyi_compensation
 from agents.scorer import _build_experience_summary
@@ -53,13 +53,17 @@ def _format_leetcode_context(lc_result: dict) -> str:
     if not lc_result.get("found") or not lc_result.get("problems"):
         return "No LeetCode company data found — generate questions based on the JD technologies."
 
-    window_label = {
-        "three-months": "last 3 months",
-        "six-months": "last 6 months",
-        "all": "all time",
-    }.get(lc_result.get("window", ""), "recent")
+    if lc_result.get("is_fallback"):
+        header = "(company not in dataset — top problems commonly asked across Amazon/Google/Meta/Microsoft, sorted by cross-company frequency):"
+    else:
+        window_label = {
+            "three-months": "last 3 months",
+            "six-months": "last 6 months",
+            "all": "all time",
+        }.get(lc_result.get("window", ""), "recent")
+        header = f"(company-specific {window_label} data — sorted by frequency):"
 
-    lines = [f"({window_label} data — sorted by frequency):"]
+    lines = [header]
     for p in lc_result["problems"]:
         lines.append(
             f"  - {p['title']} ({p['difficulty']}) | "
@@ -334,8 +338,14 @@ def run_prep(job_id: int, force: bool = False) -> None:
             else:
                 console.print(
                     f"  [dim]✗ {job.company} not in LeetCode dataset — "
-                    f"using Claude-generated questions only[/dim]"
+                    f"falling back to top problems across Amazon/Google/Meta/Microsoft[/dim]"
                 )
+                lc_result = fetch_top_problems(limit=20)
+                if lc_result.get("found"):
+                    console.print(
+                        f"  [cyan]↩[/cyan] Loaded {len(lc_result['problems'])} "
+                        f"commonly asked problems as fallback"
+                    )
         except Exception as e:
             console.print(f"[yellow]Warning: LeetCode fetch failed: {e}[/yellow]")
 

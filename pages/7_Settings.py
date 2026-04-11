@@ -68,16 +68,50 @@ with tab1:
 # Tab 2: Search settings
 # ---------------------------------------------------------------------------
 
+def _update_env(key: str, value: str):
+    """Update or add a key in the .env file."""
+    env_path = Path(".env")
+    lines = env_path.read_text().splitlines() if env_path.exists() else []
+    found = False
+    for i, line in enumerate(lines):
+        if line.startswith(f"{key}=") or line.startswith(f"{key} ="):
+            lines[i] = f"{key}={value}"
+            found = True
+            break
+    if not found:
+        lines.append(f"{key}={value}")
+    env_path.write_text("\n".join(lines) + "\n")
+
+
 with tab2:
-    st.subheader("Current Search Configuration")
-    st.caption("Edit `.env` to change these settings.")
+    st.subheader("Search Configuration")
 
     try:
         from config import settings
-        st.markdown(f"**Target Roles:** {', '.join(settings.target_roles)}")
-        st.markdown(f"**Target Locations:** {', '.join(settings.target_locations)}")
-        st.markdown(f"**Min Fit Score:** {settings.min_fit_score}")
-        st.markdown(f"**Target Comp Min:** ${settings.target_comp_min:,}")
+
+        cc1, cc2 = st.columns(2)
+        new_comp_min = cc1.number_input(
+            "Min Target Comp ($)",
+            min_value=0, max_value=1000000,
+            value=settings.target_comp_min,
+            step=5000,
+        )
+        new_min_score = cc2.number_input(
+            "Min Fit Score (1–10)",
+            min_value=1, max_value=10,
+            value=settings.min_fit_score,
+        )
+
+        if st.button("💾 Save", key="save_config"):
+            _update_env("TARGET_COMP_MIN", str(new_comp_min))
+            _update_env("MIN_FIT_SCORE", str(new_min_score))
+            st.success("Saved to .env — restart the app to apply.")
+
+        with st.expander("Other settings (edit .env directly)"):
+            st.markdown(f"**Target Roles:** {', '.join(settings.target_roles)}")
+            st.markdown(f"**Target Locations:** {', '.join(settings.target_locations)}")
+            st.caption("To change roles or locations, edit `TARGET_ROLES` and `TARGET_LOCATIONS` in `.env` as JSON arrays.")
+
     except Exception as e:
         st.error(f"Could not load config: {e}")
 
