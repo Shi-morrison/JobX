@@ -29,9 +29,23 @@ if not job_options:
     st.info("No scored jobs. Score a job first.")
     st.stop()
 
+pf1, pf2 = st.columns([3, 1])
+show_filter = pf2.selectbox("Show", ["all", "prep done", "prep pending"], key="prep_filter")
+
+filtered_options = [
+    (i, t, c, s) for i, t, c, s in job_options
+    if show_filter == "all"
+    or (show_filter == "prep done" and i in prep_ids)
+    or (show_filter == "prep pending" and i not in prep_ids)
+]
+
+if not filtered_options:
+    st.info("No jobs match that filter.")
+    st.stop()
+
 job_labels = {
     f"{'✅' if i in prep_ids else '○'} {t} @ {c} (ID {i})": i
-    for i, t, c, s in job_options
+    for i, t, c, s in filtered_options
 }
 
 default_label = None
@@ -41,8 +55,8 @@ if "prep_job_id" in st.session_state:
             default_label = label
             break
 
-selected_label = st.selectbox(
-    "Select job (✅ = prep already generated)",
+selected_label = pf1.selectbox(
+    "Select job  (✅ = prep already generated)",
     list(job_labels.keys()),
     index=list(job_labels.keys()).index(default_label) if default_label else 0,
 )

@@ -166,11 +166,11 @@ streamlit run Home.py   # or: jobx-ui (if alias is set up)
 | Page | What you do there |
 |---|---|
 | 🏠 Home | Daily digest — pipeline metrics, new jobs, follow-ups due, hiring surges, study plan |
-| 📋 Jobs | Browse and filter jobs by score/status/keyword. Pagination (25/50/100). Read gap analysis, one-click navigate to Pipeline/Prep/Research. |
-| 🚀 Pipeline | Select a job and run all 5 steps (research → tailor → cover letter → prep → salary) with progress bar. Downloads, salary display, and clickable next-step links at the end. |
-| 🏢 Research | Research a company, browse cached results, look up salary intel |
-| 📚 Prep | Read technical/behavioral/company questions, study plan, and run a mock interview with Claude scoring |
-| 📨 Outreach | Generate messages for contacts, view message content, manage follow-ups, see all contacts |
+| 📋 Jobs | Browse and filter by score/status/keyword/location/date posted. Pagination (25/50/100). Read gap analysis, one-click navigate to Pipeline/Prep/Research. |
+| 🚀 Pipeline | Filter by pipeline done/pending. Run all 5 steps with progress bar. Downloads, salary display, and clickable next-step links at the end. |
+| 🏢 Research | Filter jobs by researched/not researched. Quick-select auto-fills company name. Browse cached results, look up salary intel. |
+| 📚 Prep | Filter by prep done/pending. Read technical/behavioral/company questions, study plan, run mock interview with Claude scoring. |
+| 📨 Outreach | Filter by has contacts/no contacts. Generate messages, view content, manage follow-ups, see all contacts. |
 | 📊 Analytics | Pipeline stats, charts, Claude pattern analysis, log interview outcomes |
 | ⚙️ Settings | Upload/re-parse resume, edit min comp + fit score (saved to `.env`), run search/score, check API key status, download DB |
 
@@ -217,7 +217,7 @@ Scrapes new job listings from LinkedIn and Indeed. Tracks last run time — subs
 | Flag | Description |
 |---|---|
 | `--hours-back INTEGER` | How far back to search (default: auto since last run) |
-| `--location TEXT` | Override TARGET_LOCATIONS — `"remote"` or a city like `"New York"` |
+| `--location TEXT` | Override TARGET_LOCATIONS — single location or comma-separated list: `"remote, New York, San Francisco"` |
 | `--level TEXT` | Seniority filter: `intern`, `junior`, `mid`, `senior`, `staff` |
 | `--results INTEGER` | Max listings per role/location combo (default: 15) |
 

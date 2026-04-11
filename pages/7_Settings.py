@@ -119,7 +119,7 @@ with tab2:
     st.subheader("Run Search")
 
     sc1, sc2, sc3, sc4 = st.columns(4)
-    location = sc1.text_input("Location override", placeholder="remote / New York")
+    location = sc1.text_input("Location override", placeholder="remote, New York, San Francisco")
     level = sc2.selectbox("Seniority", ["", "junior", "mid", "senior", "staff"])
     results_per = sc3.number_input("Results per query", min_value=5, max_value=50, value=15)
     hours_back = sc4.number_input("Hours back", min_value=1, max_value=168, value=24)

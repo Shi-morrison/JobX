@@ -17,21 +17,37 @@ with tab1:
     @st.cache_data(ttl=30)
     def load_jobs_with_contacts():
         from db.session import get_session
-        from db.models import Job, Contact
+        from db.models import Job, Contact, OutreachSequence
         with get_session() as db:
             jobs = db.query(Job).filter(Job.fit_score.isnot(None)).order_by(Job.fit_score.desc()).all()
             contacts = db.query(Contact).all()
+            sequences = db.query(OutreachSequence).all()
         contact_job_ids = {c.job_id for c in contacts}
-        return [(j.id, j.title, j.company) for j in jobs], contact_job_ids
+        messaged_job_ids = {s.contact_id for s in sequences}
+        return [(j.id, j.title, j.company) for j in jobs], contact_job_ids, messaged_job_ids
 
     try:
-        job_opts, contact_job_ids = load_jobs_with_contacts()
+        job_opts, contact_job_ids, messaged_contact_ids = load_jobs_with_contacts()
     except Exception as e:
         st.error(str(e))
         st.stop()
 
-    job_labels = {f"{'👤' if i in contact_job_ids else '○'} {t} @ {c} (ID {i})": i for i, t, c in job_opts}
-    selected = st.selectbox("Select job (👤 = contacts exist)", list(job_labels.keys()) if job_labels else ["No jobs"])
+    of1, of2 = st.columns([3, 1])
+    show_filter = of2.selectbox("Show", ["all", "has contacts", "no contacts yet"], key="outreach_filter")
+
+    filtered_opts = [
+        (i, t, c) for i, t, c in job_opts
+        if show_filter == "all"
+        or (show_filter == "has contacts" and i in contact_job_ids)
+        or (show_filter == "no contacts yet" and i not in contact_job_ids)
+    ]
+
+    if not filtered_opts:
+        st.info("No jobs match that filter.")
+        st.stop()
+
+    job_labels = {f"{'👤' if i in contact_job_ids else '○'} {t} @ {c} (ID {i})": i for i, t, c in filtered_opts}
+    selected = of1.selectbox("Select job  (👤 = contacts exist)", list(job_labels.keys()) if job_labels else ["No jobs"])
     job_id = job_labels.get(selected)
 
     if job_id:

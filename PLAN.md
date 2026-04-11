@@ -206,6 +206,7 @@ JobX/
 - [x] Deduplication by URL — checks existing DB rows before inserting, also dedupes within the same batch
 - [x] `data/scraper_state.json` tracks `last_scraped_at` — subsequent runs pass `hours_old` to JobSpy so only new listings are fetched
 - [x] `python main.py search` calls `run_scraper()`, prints a Rich table of new jobs found
+- [x] `--location` accepts a single location or comma-separated list: `"remote, New York, San Francisco"`
 - [x] Fixed `expire_on_commit=False` on `SessionLocal` so ORM objects stay readable after their session closes
 - [x] 10 pytest tests in `tests/test_scraper.py` — all passing, no real network calls
 
@@ -543,23 +544,32 @@ Claude still runs but now has real data as context — so instead of guessing, i
 - [x] One-click navigate to Pipeline, Research, Prep for any job
 - [x] Mark applied directly from job card
 - [x] Pagination selector (25/50/100) — default 25 for fast load
+- [x] Location filter — partial match text input (e.g. "remote", "New York")
+- [x] Posted within filter — any time / last 24h / last 3 days / last week / last 2 weeks / last month
+- [x] Location shown in job label (📍) and inside expander
+- [x] `location` column added to `jobs` table — stored from scraper, Alembic migration applied
 
 #### Task 8.3 — Pipeline Orchestrator ✅ COMPLETE
 - [x] `pages/2_Pipeline.py` — select job, run all 5 steps with progress, download outputs
 - [x] In-page display of salary intel and company summary after run
 - [x] Dry-run and submit autofill buttons
 - [x] "Next Steps" nav links (Prep / Research / Outreach / Jobs) shown after pipeline completes
+- [x] Filter: all / pipeline done / pipeline pending (`✅` = tailored resume exists)
 
 #### Task 8.4 — Company Research ✅ COMPLETE
 - [x] `pages/3_Research.py` — research form, cached results browser, salary lookup
+- [x] Job selector with filter: all / researched / not researched (`✅` = company researched)
+- [x] Selecting a job auto-fills the company name field
 
 #### Task 8.5 — Interview Prep ✅ COMPLETE
 - [x] `pages/4_Prep.py` — tabbed view of technical/behavioral/company questions/study plan
 - [x] In-browser mock interview with Claude scoring
 - [x] Fixed: `star_framework` renders correctly whether Claude returns a dict or plain string
+- [x] Filter: all / prep done / prep pending
 
 #### Task 8.6 — Outreach ✅ COMPLETE
 - [x] `pages/5_Outreach.py` — generate messages, view content, manage follow-ups, all contacts
+- [x] Filter: all / has contacts / no contacts yet
 
 #### Task 8.7 — Analytics ✅ COMPLETE
 - [x] `pages/6_Analytics.py` — charts, Claude pattern analysis, outcome logging

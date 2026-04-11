@@ -314,7 +314,7 @@ def run_fetch_descriptions(limit: int | None = None) -> None:
 
 def run_scraper(
     hours_back: int | None = None,
-    location_override: str | None = None,
+    location_override: str | list[str] | None = None,
     level: str | None = None,
     results_per_query: int = 15,
 ) -> None:
@@ -322,8 +322,9 @@ def run_scraper(
 
     Args:
         hours_back: How far back to look. Auto-calculates from last run if None (default 24h).
-        location_override: Single location overriding TARGET_LOCATIONS in .env.
-                           Case-insensitive — 'remote', 'Remote', 'REMOTE' all work.
+        location_override: One or more locations overriding TARGET_LOCATIONS in .env.
+                           Pass a string ("remote"), comma-separated string ("remote, New York"),
+                           or a list. Case-insensitive.
         level: Seniority level — intern/junior/mid/senior/staff. Prepended to each search term.
         results_per_query: Max listings per role/location combo. Default 15.
     """
@@ -352,9 +353,13 @@ def run_scraper(
     else:
         roles = base_roles
 
-    # Normalize locations — user can type 'remote', 'Remote', or 'REMOTE'
+    # Normalize locations — supports single string, comma-separated string, or list
     if location_override:
-        locations = [_normalize_location(location_override)]
+        if isinstance(location_override, list):
+            raw_locs = location_override
+        else:
+            raw_locs = [l.strip() for l in location_override.split(",") if l.strip()]
+        locations = [_normalize_location(l) for l in raw_locs]
     else:
         locations = [_normalize_location(loc) for loc in settings.target_locations]
 

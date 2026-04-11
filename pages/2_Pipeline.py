@@ -32,7 +32,30 @@ if not job_options:
     st.info("No scored jobs yet. Go to **Search** then **Score** first.")
     st.stop()
 
-job_labels = {f"{t} @ {c} (ID {i}) — {s}/10": i for i, t, c, s in job_options}
+# Mark which jobs have a completed pipeline (tailored resume exists)
+def _pipeline_done(job_id):
+    return Path(f"data/resume_versions/resume_{job_id}.docx").exists()
+
+pipeline_done_ids = {i for i, *_ in job_options if _pipeline_done(i)}
+
+fc1, fc2 = st.columns([3, 1])
+show_filter = fc2.selectbox("Show", ["all", "pipeline done", "pipeline pending"], key="pipe_filter")
+
+filtered_options = [
+    (i, t, c, s) for i, t, c, s in job_options
+    if show_filter == "all"
+    or (show_filter == "pipeline done" and i in pipeline_done_ids)
+    or (show_filter == "pipeline pending" and i not in pipeline_done_ids)
+]
+
+if not filtered_options:
+    st.info("No jobs match that filter.")
+    st.stop()
+
+job_labels = {
+    f"{'✅' if i in pipeline_done_ids else '○'} {t} @ {c} (ID {i}) — {s}/10": i
+    for i, t, c, s in filtered_options
+}
 
 # Pre-select from session state if navigated here from Jobs page
 default_label = None
@@ -42,8 +65,8 @@ if "pipeline_job_id" in st.session_state:
             default_label = label
             break
 
-selected_label = st.selectbox(
-    "Select a job",
+selected_label = fc1.selectbox(
+    "Select a job  (✅ = pipeline already run)",
     list(job_labels.keys()),
     index=list(job_labels.keys()).index(default_label) if default_label else 0,
 )

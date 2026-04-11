@@ -10,7 +10,41 @@ st.caption("Funding stage · Glassdoor rating · Tech stack · News · Layoff hi
 # Input
 # ---------------------------------------------------------------------------
 
-default_company = st.session_state.get("research_company", "")
+@st.cache_data(ttl=30)
+def load_jobs_for_research():
+    from db.session import get_session
+    from db.models import Job, CompanyResearch
+    with get_session() as db:
+        jobs = db.query(Job).filter(Job.fit_score.isnot(None)).order_by(Job.fit_score.desc()).all()
+        researched = {r.company_name.lower() for r in db.query(CompanyResearch).all()}
+    return [(j.id, j.title, j.company, j.fit_score) for j in jobs], researched
+
+
+rf1, rf2 = st.columns([3, 1])
+
+try:
+    job_opts, researched_companies = load_jobs_for_research()
+    show_filter = rf2.selectbox("Show", ["all", "researched", "not researched"], key="research_filter")
+    filtered_jobs = [
+        (i, t, c, s) for i, t, c, s in job_opts
+        if show_filter == "all"
+        or (show_filter == "researched" and c.lower() in researched_companies)
+        or (show_filter == "not researched" and c.lower() not in researched_companies)
+    ]
+    if filtered_jobs:
+        job_labels = {
+            f"{'✅' if c.lower() in researched_companies else '○'} {t} @ {c} (ID {i})": c
+            for i, t, c, s in filtered_jobs
+        }
+        chosen = rf1.selectbox("Quick-select from your jobs  (✅ = already researched)", ["— type manually below —"] + list(job_labels.keys()))
+        preselect = job_labels.get(chosen, "") if chosen != "— type manually below —" else ""
+    else:
+        rf1.caption("No jobs match that filter.")
+        preselect = ""
+except Exception:
+    preselect = ""
+
+default_company = preselect or st.session_state.get("research_company", "")
 company = st.text_input("Company name", value=default_company, placeholder="Stripe, Google, Robinhood...")
 force = st.checkbox("Re-research (ignore cache)")
 
