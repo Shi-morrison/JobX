@@ -1,8 +1,12 @@
 # Job Application Agent Suite — Master Build Plan
 
 ## Project Overview
-A CLI-based AI agent suite that automates the entire software engineering job application process.
-Built with Python, Claude API, LangGraph, Playwright, and SQLite.
+An AI agent suite that automates the entire software engineering job application process.
+Built with Python, Claude API, Playwright, SQLite, and Streamlit.
+
+Two interfaces — same underlying code:
+- **CLI** (`main.py`) — terminal commands, best for batch operations and debugging
+- **UI** (`streamlit run Home.py`) — browser dashboard, best for browsing, reviewing, and one-click actions
 
 ---
 
@@ -65,13 +69,13 @@ The standard Python testing framework. You write test functions, run `pytest`, a
 ## Tech Stack
 - **Language:** Python 3.11+
 - **AI:** Anthropic Claude API (`claude-sonnet-4-6`) ✅ corrected from original
-- **Agent Orchestration:** LangGraph
-- **CLI:** Typer
+- **CLI:** Typer (`main.py`)
+- **UI:** Streamlit (`Home.py` + `pages/`) ✅ added
 - **Browser Automation:** Playwright + Chromium
 - **Database:** SQLite + SQLAlchemy
 - **Job Scraping:** JobSpy
 - **Search:** SerpAPI (`google-search-results` package) ✅ corrected from original
-- **Email:** Gmail API + smtplib
+- **Email:** Gmail API
 - **Resume/Doc editing:** python-docx + pypdf ✅ corrected from pypdf2
 - **Scheduling:** APScheduler
 
@@ -81,10 +85,21 @@ The standard Python testing framework. You write test functions, run `pytest`, a
 ```
 JobX/
 ├── main.py                        # Typer CLI entry point
+├── Home.py                        # Streamlit UI — Daily Digest (home page)
 ├── config.py                      # API keys, user prefs, .env loader
 ├── requirements.txt
 ├── .env.example
 ├── .gitignore
+├── .streamlit/
+│   └── config.toml                # Streamlit theme (dark mode, accent color)
+├── pages/                         # Streamlit pages (auto-discovered)
+│   ├── 1_Jobs.py                  # Job browser with filters + gap analysis
+│   ├── 2_Pipeline.py              # Orchestrator UI — run all steps for a job
+│   ├── 3_Research.py              # Company research + salary lookup
+│   ├── 4_Prep.py                  # Interview prep viewer + mock interview
+│   ├── 5_Outreach.py              # Outreach messages + follow-up tracker
+│   ├── 6_Analytics.py            # Pipeline stats + outcome logging
+│   └── 7_Settings.py              # Resume upload, search/score controls, DB stats
 ├── alembic.ini                    # Alembic migration config
 ├── alembic/                       # Migration scripts (auto-generated)
 ├── db/
@@ -93,7 +108,7 @@ JobX/
 │   └── session.py                 # DB session factory + init_db()
 ├── agents/
 │   ├── __init__.py
-│   ├── orchestrator.py            # LangGraph master agent
+│   ├── orchestrator.py            # Chains research → tailor → cover letter → prep → salary
 │   ├── scorer.py                  # Fit score + ATS check + gap analysis
 │   ├── resume_tailor.py           # Resume rewriting per JD
 │   ├── cover_letter.py            # Cover letter generator
@@ -101,21 +116,31 @@ JobX/
 │   ├── company_research.py        # Company intel agent
 │   ├── salary_intel.py            # Salary data agent
 │   ├── hiring_signals.py          # Hiring velocity detector
-│   ├── contact_finder.py          # Find hiring managers
-│   ├── outreach.py                # Message gen + sequence manager
-│   ├── applicator.py              # ATS autofill (Greenhouse/Lever/Workday)
-│   └── tracker.py                 # Analytics + feedback loop
+│   ├── contact_finder.py          # Find hiring managers via SerpAPI
+│   ├── outreach.py                # Message gen + sequence manager + Gmail send
+│   ├── autofill.py                # ATS autofill (Greenhouse + Lever)
+│   ├── analytics.py               # Response rates + outcome tracker + Claude analysis
+│   ├── digest.py                  # Daily digest data (also used by Home.py)
+│   └── referral_detector.py       # LinkedIn CSV cross-reference
 ├── tools/
 │   ├── __init__.py
 │   ├── llm.py                     # Claude API wrapper + prompt templates
-│   ├── scraper.py                 # JobSpy wrapper
-│   ├── browser.py                 # Playwright session manager
+│   ├── scraper.py                 # JobSpy wrapper + LinkedIn description fetcher
+│   ├── glassdoor.py               # Playwright Glassdoor scraper
+│   ├── levelsfyi.py               # levels.fyi comp + company meta fetcher
+│   ├── leetcode.py                # LeetCode company problem fetcher
+│   ├── stackshare.py              # StackShare tech stack scraper
 │   ├── search.py                  # SerpAPI wrapper
-│   └── gmail.py                   # Gmail API wrapper
+│   ├── gmail_auth.py              # One-time Gmail OAuth flow
+│   └── ats/
+│       ├── greenhouse.py          # Greenhouse form autofill
+│       └── lever.py               # Lever form autofill
 ├── tools/prompts/                 # Prompt templates as .txt files
-├── tests/                         # pytest test files
+├── tests/                         # pytest test files (205 tests)
 └── data/
     ├── base_resume.docx           # User's master resume (user provides)
+    ├── resume_parsed.json         # Cached parsed resume (auto-generated)
+    ├── scraper_state.json         # Last scrape timestamp (auto-generated)
     ├── resume_versions/           # Tailored resumes per job (auto-generated)
     ├── cover_letters/             # Cover letters per job (auto-generated)
     └── jobs.db                    # SQLite database (auto-generated)
@@ -400,114 +425,198 @@ Claude still runs but now has real data as context — so instead of guessing, i
 
 ---
 
-### PHASE 4 — Intelligence & Research
+### PHASE 4 — Intelligence & Research ✅ COMPLETE
 **Goal:** Know the company deeply before applying or reaching out.
 **Depends on:** Phase 1 (DB, scraper). Enriches Phase 3.2 and 3.5.4 retroactively.
 
-#### Task 4.1 — Company Research Agent
-- [ ] In `agents/company_research.py`, build `research_company(company_name)`
-- [ ] Sources to pull: Glassdoor rating (Playwright), recent news (SerpAPI), funding/stage (Crunchbase scrape or SerpAPI), tech stack (StackShare or Builtwith), layoff history (layoffs.fyi scrape)
-- [ ] Claude synthesizes into a structured `CompanyResearch` record
-- [ ] CLI: `python main.py research --company "Stripe"`
+#### Task 4.1 — Company Research Agent ✅ COMPLETE
+- [x] `agents/company_research.py` — `research_company(company_name)` orchestrates all sources
+- [x] Sources: Glassdoor rating (Playwright), recent news (SerpAPI), funding/stage (SerpAPI), tech stack (StackShare), layoff history (layoffs.fyi)
+- [x] Claude synthesizes into a structured `CompanyResearch` record saved to DB
+- [x] `get_cached_research(company)` — returns cached record to avoid redundant API calls
+- [x] CLI: `python main.py research --company "Stripe"` + Research page in UI
 
-#### Task 4.2 — Salary Intelligence Agent
-- [ ] In `agents/salary_intel.py`, scrape Levels.fyi and Glassdoor for comp data
-- [ ] Inputs: company name + role level (junior/mid/senior)
-- [ ] Output: salary range, equity range, bonus, total comp — stored in `SalaryData`
-- [ ] CLI: `python main.py salary --company "Stripe" --level senior`
+#### Task 4.2 — Salary Intelligence Agent ✅ COMPLETE
+- [x] `agents/salary_intel.py` — fetches levels.fyi `.md` endpoint (no auth, LLM-readable)
+- [x] Claude extracts role-level range (±20% around median), stores in `SalaryData` table
+- [x] Inputs: company name + role level (junior/mid/senior/staff/principal)
+- [x] Output: salary_min, salary_max, equity_range, matched_role — cached per company+level
+- [x] CLI: `python main.py salary --company "Stripe" --level senior` + salary section in Research page
 
-#### Task 4.3 — Hiring Signal Detector
-- [ ] Monitor job posting velocity: if a company posts 3+ eng roles in 7 days, flag as "hiring surge"
-- [ ] Also use SerpAPI to find LinkedIn posts where employees say "we're hiring"
-- [ ] Boost `fit_score` priority for companies with active hiring signals
+#### Task 4.3 — Hiring Signal Detector ✅ COMPLETE
+- [x] `agents/hiring_signals.py` — `get_surge_companies(days=7, min_jobs=3)` queries jobs table
+- [x] Groups by company, returns sorted list of companies posting 3+ jobs in last 7 days
+- [x] `get_surge_companies_set()` for O(1) lookup — used by `jobs` command to show ⚡ surge flag
+- [x] Optional SerpAPI enrichment via `check_hiring_posts(company)` (skips gracefully if no key)
+- [x] CLI: `python main.py signals` + surge section on Home page in UI
 
 ---
 
-### PHASE 5 — Outreach
+### PHASE 5 — Outreach ✅ COMPLETE
 **Goal:** Get a human to see your application.
 **Depends on:** Phase 4 complete (need company research before reaching out)
 
-#### Task 5.1 — Referral Detector
-- [ ] User exports LinkedIn connections as CSV (Settings → Data Export)
-- [ ] `python main.py referrals --job-id <id>` cross-references CSV against job's company
-- [ ] Outputs matching connections with their title and LinkedIn URL
+#### Task 5.1 — Referral Detector ✅ COMPLETE
+- [x] `agents/referral_detector.py` — `load_connections(csv_path)` parses LinkedIn CSV export
+- [x] Handles 3-line header format LinkedIn uses (notes line, blank line, real headers)
+- [x] `find_referrals(job_company, connections)` — fuzzy match handles "Stripe" vs "Stripe, Inc."
+- [x] `save_referrals_to_db(job_id, matches)` — upserts by linkedin_url
+- [x] CLI: `python main.py referrals --job-id <id>` (requires `data/linkedin_connections.csv`)
 
-#### Task 5.2 — Contact Finder
-- [ ] In `agents/contact_finder.py`, use SerpAPI to search `site:linkedin.com [company] recruiter software engineer`
-- [ ] Playwright to visit and parse LinkedIn profiles
-- [ ] Store found contacts in `Contact` model linked to job
+#### Task 5.2 — Contact Finder ✅ COMPLETE
+- [x] `agents/contact_finder.py` — SerpAPI `site:linkedin.com/in` queries for recruiters/EMs
+- [x] `_parse_name_title(search_title, company)` parses "Jane Doe - Recruiter at Stripe | LinkedIn"
+- [x] Stores found contacts in `Contact` table linked to job, upserts by linkedin_url
+- [x] CLI: `python main.py find-contacts --job-id <id>` (requires SERPAPI_KEY)
 
-#### Task 5.3 — Outreach Message Generator
-- [ ] Claude writes personalized LinkedIn DM or email using: contact name/title, company research, your background, the specific role
-- [ ] Two variants per contact: short LinkedIn DM (300 chars) and longer email version
+#### Task 5.3 — Outreach Message Generator ✅ COMPLETE
+- [x] `agents/outreach.py` — `generate_messages(contact, job, resume_data, company_intel)`
+- [x] Claude writes LinkedIn DM (≤300 chars) and cold email (150–200 words) per contact
+- [x] Both variants saved to `OutreachSequence` table per contact
 
-#### Task 5.4 — Outreach Sequence Manager
-- [ ] In `agents/outreach.py`, manage full send → follow-up → ghost lifecycle
-- [ ] Day 0: send initial message via Gmail API
-- [ ] Day 5: if no response, send follow-up
-- [ ] Day 10: mark as ghosted
-- [ ] All state tracked in `OutreachSequence` table
+#### Task 5.4 — Outreach Sequence Manager ✅ COMPLETE
+- [x] `mark_sent(sequence_id)` — sets sent_at, schedules follow_up_due (+5 days), status="sent"
+- [x] `mark_responded(sequence_id)` — sets response_received=True, status="responded"
+- [x] `get_due_followups()` — returns sequences where follow_up_due ≤ now and not responded
+- [x] `auto_ghost_stale()` — marks 10+ day old unresponded sequences as ghosted
+- [x] `_send_gmail(to_email, subject, body)` — Gmail API send (requires token.json from OAuth)
+- [x] CLI: `python main.py outreach --job-id <id>` / `--due` flag for follow-ups
+- [x] `tools/gmail_auth.py` — one-time OAuth flow to generate token.json
 
 ---
 
-### PHASE 6 — Auto-Application
+### PHASE 6 — Auto-Application ✅ COMPLETE
 **Goal:** Submit applications automatically via Playwright.
 **Depends on:** Phase 3 complete (need tailored resume + cover letter before applying)
-**Note:** Most brittle phase — ATS sites update their DOM frequently. Build with resilience in mind.
+**Note:** Most brittle phase — ATS sites update their DOM frequently. Built with resilience in mind.
 
-#### Task 6.1 — Greenhouse Autofill
-- [ ] Playwright selectors for standard Greenhouse application form
-- [ ] Claude answers custom questions using JD + resume context
-- [ ] Log application to `Application` table on success
+#### Task 6.1 — Greenhouse Autofill ✅ COMPLETE
+- [x] Playwright selectors for standard Greenhouse application form
+- [x] Claude answers custom questions using JD + resume context
+- [x] Screenshot before/after for review
+- [x] Log application to `Application` table on success
 
-#### Task 6.2 — Lever Autofill
-- [ ] Same approach as Greenhouse for Lever ATS
+#### Task 6.2 — Lever Autofill ✅ COMPLETE
+- [x] Same approach as Greenhouse for Lever ATS
+- [x] Auto-appends `/apply` to Lever job URLs
 
 #### Task 6.3 — Workday Autofill
-- [ ] Multi-step forms, dynamic fields, login-wall behavior
-- [ ] Build with extra error handling and screenshot-on-failure for debugging
+- [ ] Not implemented — too brittle, custom per-company DOM. Apply manually.
 
 #### Task 6.4 — LinkedIn Easy Apply
-- [ ] Playwright automation for LinkedIn Easy Apply flow
-- [ ] Requires LinkedIn session cookie management
+- [ ] Not implemented — requires LinkedIn session cookie management, high ban risk. Apply manually.
 
 ---
 
-### PHASE 7 — Analytics & Feedback Loop
+### PHASE 7 — Analytics & Feedback Loop ✅ COMPLETE
 **Goal:** Make the system smarter over time.
 **Depends on:** All previous phases generating data
 
-#### Task 7.1 — Response Rate Analyzer
-- [ ] Query `OutreachSequence` and `Application` tables to compute response rates
-- [ ] Claude summarizes patterns: "Your response rate is 3x higher for Series B startups vs FAANG"
+#### Task 7.1 — Response Rate Analyzer ✅ COMPLETE
+- [x] `agents/analytics.py` — queries `OutreachSequence` and `Application` tables
+- [x] Computes: total sent, responded, ghosted, response rate %
+- [x] Claude summarizes patterns and gives recommendations (needs 3+ applications)
+- [x] `python main.py analytics` + Analytics page in UI
 
-#### Task 7.2 — Interview Outcome Tracker
-- [ ] `python main.py outcome --job-id <id>` prompts user to log interview result
-- [ ] Claude analyzes patterns across outcomes + mock interview sessions
-- [ ] Feeds updated study plan back to Phase 3.5.6
+#### Task 7.2 — Interview Outcome Tracker ✅ COMPLETE
+- [x] `python main.py outcome --job-id <id>` — interactive prompt to log stage + feedback
+- [x] Claude analyzes feedback and suggests specific study topics to close the gap
+- [x] Outcome logging also available in Analytics page in UI
 
-#### Task 7.3 — Daily Digest Command
-- [ ] `python main.py digest` — the daily driver command
-- [ ] Sections: new jobs ranked by fit, follow-ups due today, hiring surges, pipeline summary, study plan items due
+#### Task 7.3 — Daily Digest ✅ COMPLETE
+- [x] `python main.py digest` — terminal daily driver command
+- [x] `Home.py` (Streamlit) — visual daily digest dashboard (home page of UI)
+- [x] Sections: pipeline summary, new scored jobs (24h), follow-ups due, hiring surges, study plan
 
 ---
 
-## CLI Command Reference (Final State)
+### PHASE 8 — Streamlit UI ✅ COMPLETE
+**Goal:** Browser-based dashboard so everything is accessible without memorizing CLI commands.
+**Depends on:** All previous phases
+**Architecture:** Streamlit pages call agent functions directly — same code as CLI, no API layer.
+
+#### Task 8.1 — Home / Daily Digest ✅ COMPLETE
+- [x] `Home.py` — pipeline metrics, new jobs, follow-ups, surges, study plan in one view
+
+#### Task 8.2 — Job Browser ✅ COMPLETE
+- [x] `pages/1_Jobs.py` — filter by score/status/keyword, expand for full gap analysis
+- [x] One-click navigate to Pipeline, Research, Prep for any job
+- [x] Mark applied directly from job card
+
+#### Task 8.3 — Pipeline Orchestrator ✅ COMPLETE
+- [x] `pages/2_Pipeline.py` — select job, run all 5 steps with progress, download outputs
+- [x] In-page display of salary intel and company summary after run
+- [x] Dry-run and submit autofill buttons
+
+#### Task 8.4 — Company Research ✅ COMPLETE
+- [x] `pages/3_Research.py` — research form, cached results browser, salary lookup
+
+#### Task 8.5 — Interview Prep ✅ COMPLETE
+- [x] `pages/4_Prep.py` — tabbed view of technical/behavioral/company questions/study plan
+- [x] In-browser mock interview with Claude scoring
+
+#### Task 8.6 — Outreach ✅ COMPLETE
+- [x] `pages/5_Outreach.py` — generate messages, view content, manage follow-ups, all contacts
+
+#### Task 8.7 — Analytics ✅ COMPLETE
+- [x] `pages/6_Analytics.py` — charts, Claude pattern analysis, outcome logging
+
+#### Task 8.8 — Settings ✅ COMPLETE
+- [x] `pages/7_Settings.py` — resume upload/parse, search/score controls, API key status, DB download
+
+**How to run:**
 ```bash
-python main.py db init              # Initialize database
-python main.py search               # Scrape new job listings
-python main.py score                # Score and rank all unscored jobs
-python main.py research --company   # Run company research agent
-python main.py salary --company --level  # Get salary intel
-python main.py prep run --job-id    # Generate interview prep for a job
-python main.py prep mock --job-id   # Start mock interview session
-python main.py referrals --job-id   # Check LinkedIn connections at company
-python main.py outreach --job-id    # Find contacts + generate messages
-python main.py outreach --due       # Show follow-ups due today
-python main.py apply --job-id       # Auto-fill and submit application
-python main.py outcome --job-id     # Log interview outcome
-python main.py digest               # Daily summary dashboard
+streamlit run Home.py
+# Opens at http://localhost:8501
 ```
+
+---
+
+## Command Reference
+
+### CLI
+```bash
+python main.py db init                        # Initialize database
+python main.py parse-resume                   # Parse resume (--force to re-parse)
+python main.py search                         # Scrape new job listings
+python main.py fetch-descriptions             # Backfill missing descriptions
+python main.py score                          # Score and rank all unscored jobs
+python main.py jobs                           # List scored jobs
+python main.py show --job-id <id>             # Full details for one job
+python main.py mark-applied --job-id <id>     # Mark job as applied
+python main.py run --job-id <id>              # Full pipeline (orchestrator)
+python main.py research --company <name>      # Run company research agent
+python main.py salary --company <n> --level   # Get salary intel
+python main.py signals                        # Detect hiring surges
+python main.py tailor --job-id <id>           # Tailor resume for a job
+python main.py cover-letter --job-id <id>     # Generate cover letter
+python main.py apply --job-id <id>            # Autofill application (--submit to send)
+python main.py prep run --job-id <id>         # Generate interview prep
+python main.py prep mock --job-id <id>        # Start mock interview session
+python main.py referrals --job-id <id>        # Check LinkedIn connections at company
+python main.py find-contacts --job-id <id>    # Find recruiters via SerpAPI
+python main.py outreach --job-id <id>         # Generate outreach messages
+python main.py outreach --due                 # Show follow-ups due today
+python main.py outcome --job-id <id>          # Log interview outcome
+python main.py analytics                      # Analytics report
+python main.py digest                         # Daily summary dashboard
+```
+
+### UI
+```bash
+streamlit run Home.py       # Start UI at http://localhost:8501
+```
+
+| Page | What you do there |
+|---|---|
+| 🏠 Home | Daily digest — see everything needing attention |
+| 📋 Jobs | Browse, filter, read gap analysis |
+| 🚀 Pipeline | Run research → tailor → cover letter → prep → salary in one click |
+| 🏢 Research | Research a company, look up salary |
+| 📚 Prep | Read prep questions, do mock interview |
+| 📨 Outreach | Generate messages, manage follow-ups |
+| 📊 Analytics | Stats, charts, log interview outcomes |
+| ⚙️ Settings | Upload resume, run search/score, API key status |
 
 ## Key Connections Between Phases
 - `gap_analyzer (2.4)` → feeds → `resume_tailor (3.1)` and `study_plan (3.5.6)`
