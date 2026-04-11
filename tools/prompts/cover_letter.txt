@@ -15,6 +15,9 @@ Hard gaps: {hard_gaps}
 Soft gaps: {soft_gaps}
 Reframe suggestions: {reframe_suggestions}
 
+Company intelligence (use if relevant — do not force it in):
+{company_intel}
+
 Instructions:
 - Opening paragraph: lead with the single most relevant thing about the candidate for THIS specific role — not a generic opener
 - Body (2 paragraphs): connect their actual experience to the JD's core requirements; use specific examples, not vague claims

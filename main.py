@@ -204,7 +204,7 @@ def score(
 @app.command()
 def jobs(
     min_score: int = typer.Option(None, "--min-score", help="Only show jobs at or above this fit score."),
-    limit: int = typer.Option(25, "--limit", help="Max number of jobs to show (default 25). Ignored when --all is used."),
+    limit: int = typer.Option(25, "--limit", help="Max number of jobs to show (default 25). Works with all flags — e.g. --recent --limit 50. Ignored when --all is used."),
     unscored: bool = typer.Option(False, "--unscored", help="Show only jobs that have not been scored yet (use to find IDs for --job-id)."),
     all_jobs_flag: bool = typer.Option(False, "--all", help="Show all jobs — scored, unscored, and applied."),
     applied: bool = typer.Option(False, "--applied", help="Show only jobs you have marked as applied."),
@@ -224,6 +224,8 @@ def jobs(
 
       python main.py jobs --recent               # scored jobs sorted by newest posted
 
+      python main.py jobs --recent --limit 50    # 50 most recently posted scored jobs
+
       python main.py jobs --search "stripe"      # find jobs at Stripe
 
       python main.py jobs --search "ML"          # find ML-related jobs
@@ -239,6 +241,9 @@ def jobs(
     from db.session import get_session
     from db.models import Job
     from rich.table import Table
+    from agents.hiring_signals import get_surge_companies_set
+
+    surge_companies = get_surge_companies_set()
 
     with get_session() as db:
         if applied:
@@ -302,6 +307,7 @@ def jobs(
     table.add_column("Fit", width=6, justify="center")
     table.add_column("ATS%", width=6, justify="center")
     table.add_column("JD", width=4, justify="center")
+    table.add_column("⚡", width=3, justify="center")
     table.add_column("Title", style="bold")
     table.add_column("Company")
     table.add_column("Status", width=10)
@@ -318,11 +324,13 @@ def jobs(
         status_color = "blue" if job.status == "applied" else "dim"
         has_desc = bool(job.description and job.description.strip() not in ("", "nan"))
         jd_str = "[green]✓[/green]" if has_desc else "[red]✗[/red]"
+        surge_str = "[yellow]⚡[/yellow]" if job.company in surge_companies else ""
         table.add_row(
             str(job.id),
             fit_str,
             ats,
             jd_str,
+            surge_str,
             job.title,
             job.company,
             f"[{status_color}]{job.status or '—'}[/{status_color}]",
@@ -330,6 +338,8 @@ def jobs(
         )
 
     console.print(table)
+    if surge_companies:
+        console.print(f"[dim]⚡ = hiring surge (3+ roles posted in last 7 days). See: [bold]python main.py signals[/bold][/dim]")
     if applied:
         console.print("[dim]Run [bold]python main.py show --job-id <id>[/bold] for full details on any job.[/dim]")
     elif unscored:
@@ -512,9 +522,54 @@ def cover_letter(
 # ---------------------------------------------------------------------------
 
 @app.command()
-def research(company: str = typer.Option(..., help="Company name to research")):
-    """Run company research agent."""
-    console.print(f"[yellow]Research command for '{company}' — coming in Phase 4.[/yellow]")
+def research(
+    company: str = typer.Option(..., "--company", help="Company name to research."),
+    force: bool = typer.Option(False, "--force", help="Re-research even if cached data exists."),
+):
+    """Research a company: funding stage, Glassdoor rating, tech stack, news, and layoff history.
+
+    Results are cached in the database and automatically used to enrich cover letters
+    and interview prep for any job at that company.
+
+    Run this before generating a cover letter or interview prep for best results.
+
+    Examples:
+
+      python main.py research --company "Stripe"
+
+      python main.py research --company "Robinhood" --force
+    """
+    from agents.company_research import run_research
+    run_research(company=company, force=force)
+
+
+# ---------------------------------------------------------------------------
+# signals
+# ---------------------------------------------------------------------------
+
+@app.command()
+def signals(
+    days: int = typer.Option(7, "--days", help="Look-back window in days. Default: 7."),
+    min_jobs: int = typer.Option(3, "--min-jobs", help="Minimum postings to count as a surge. Default: 3."),
+    serpapi: bool = typer.Option(False, "--serpapi", help="Also search SerpAPI for 'we're hiring' posts (requires SERPAPI_KEY)."),
+):
+    """Detect companies with a hiring surge based on recent job posting velocity.
+
+    Flags any company that posted 3+ engineering roles in the last 7 days.
+    These are high-priority targets — more open roles = more chances to get noticed.
+
+    Examples:
+
+      python main.py signals                       # surge in last 7 days
+
+      python main.py signals --days 14             # wider window
+
+      python main.py signals --min-jobs 2          # lower threshold
+
+      python main.py signals --serpapi             # also check LinkedIn posts
+    """
+    from agents.hiring_signals import run_signals
+    run_signals(days=days, min_jobs=min_jobs, serpapi=serpapi)
 
 
 # ---------------------------------------------------------------------------
@@ -523,11 +578,25 @@ def research(company: str = typer.Option(..., help="Company name to research")):
 
 @app.command()
 def salary(
-    company: str = typer.Option(..., help="Company name"),
-    level: str = typer.Option(..., help="Role level: junior/mid/senior"),
+    company: str = typer.Option(..., "--company", help="Company name to look up."),
+    level: str = typer.Option(..., "--level", help="Role level: junior / mid / senior / staff / principal"),
+    force: bool = typer.Option(False, "--force", help="Re-fetch even if cached data exists."),
 ):
-    """Get salary intelligence for a company and level."""
-    console.print(f"[yellow]Salary command — coming in Phase 4.[/yellow]")
+    """Look up compensation data for a company and role level from levels.fyi.
+
+    Data is fetched from levels.fyi's public salary endpoint, parsed by Claude
+    into a range estimate, and cached in the database for reuse.
+
+    Examples:
+
+      python main.py salary --company "Stripe" --level senior
+
+      python main.py salary --company "Google" --level staff
+
+      python main.py salary --company "Stripe" --level senior --force
+    """
+    from agents.salary_intel import run_salary
+    run_salary(company=company, level=level, force=force)
 
 
 # ---------------------------------------------------------------------------
@@ -580,9 +649,23 @@ def prep_mock(
 # ---------------------------------------------------------------------------
 
 @app.command()
-def referrals(job_id: int = typer.Option(..., help="Job ID to check connections for")):
-    """Cross-reference LinkedIn connections against a job's company."""
-    console.print(f"[yellow]Referrals command — coming in Phase 5.[/yellow]")
+def referrals(
+    job_id: int = typer.Option(..., "--job-id", help="Job ID to find referrals for."),
+):
+    """Cross-reference your LinkedIn connections against a job's company.
+
+    Export your LinkedIn connections first:
+      LinkedIn → Settings → Data Privacy → Get a copy of your data → Connections
+      Save the downloaded CSV to: data/linkedin_connections.csv
+
+    Any connections found are saved to the database for outreach.
+
+    Example:
+
+      python main.py referrals --job-id 12
+    """
+    from agents.referral_detector import run_referrals
+    run_referrals(job_id=job_id)
 
 
 # ---------------------------------------------------------------------------
@@ -591,11 +674,61 @@ def referrals(job_id: int = typer.Option(..., help="Job ID to check connections 
 
 @app.command()
 def outreach(
-    job_id: int = typer.Option(None, help="Job ID to find contacts for"),
-    due: bool = typer.Option(False, "--due", help="Show follow-ups due today"),
+    job_id: int = typer.Option(None, "--job-id", help="Job ID to generate outreach for."),
+    due: bool = typer.Option(False, "--due", help="Show all follow-ups due today across all jobs."),
+    send: bool = typer.Option(False, "--send", help="Send via Gmail (requires token.json OAuth setup)."),
+    messages: bool = typer.Option(False, "--messages", help="Print the generated message text."),
 ):
-    """Find contacts and generate outreach messages, or show follow-ups due today."""
-    console.print("[yellow]Outreach command — coming in Phase 5.[/yellow]")
+    """Generate personalized outreach messages for a job's contacts, or show follow-ups due.
+
+    Generates both a LinkedIn DM (≤300 chars) and an email for each saved contact.
+    Messages are stored in the database. Use --send to send via Gmail if configured.
+
+    Find contacts first with:
+      python main.py referrals --job-id <id>      (LinkedIn CSV)
+      python main.py find-contacts --job-id <id>   (SerpAPI search)
+
+    Examples:
+
+      python main.py outreach --job-id 12             # generate messages
+
+      python main.py outreach --job-id 12 --messages  # generate and display
+
+      python main.py outreach --job-id 12 --send      # generate and send via Gmail
+
+      python main.py outreach --due                   # show follow-ups due today
+    """
+    from agents.outreach import run_outreach, run_due_followups
+    if due:
+        run_due_followups()
+    else:
+        run_outreach(job_id=job_id, send=send, messages=messages)
+
+
+# ---------------------------------------------------------------------------
+# find-contacts
+# ---------------------------------------------------------------------------
+
+@app.command(name="find-contacts")
+def find_contacts(
+    job_id: int = typer.Option(..., "--job-id", help="Job ID to find contacts for."),
+    results: int = typer.Option(5, "--results", help="Max contacts to find per company. Default: 5."),
+):
+    """Search for recruiters and engineering managers at a job's company via SerpAPI.
+
+    Uses Google to find LinkedIn profiles of recruiters and EMs. Results are saved
+    to the database and used by the outreach command to generate messages.
+
+    Requires SERPAPI_KEY in .env. Works best for well-known tech companies.
+
+    Examples:
+
+      python main.py find-contacts --job-id 12
+
+      python main.py find-contacts --job-id 12 --results 10
+    """
+    from agents.contact_finder import run_contact_finder
+    run_contact_finder(job_id=job_id, num_results=results)
 
 
 # ---------------------------------------------------------------------------
@@ -603,9 +736,30 @@ def outreach(
 # ---------------------------------------------------------------------------
 
 @app.command()
-def apply(job_id: int = typer.Option(..., help="Job ID to apply for")):
-    """Auto-fill and submit an application via Playwright."""
-    console.print(f"[yellow]Apply command for job {job_id} — coming in Phase 6.[/yellow]")
+def apply(
+    job_id: int = typer.Option(..., "--job-id", help="Job ID to apply for. Must be scored first."),
+    submit: bool = typer.Option(False, "--submit", help="Actually submit the form. Without this flag, fills but does not click submit (safe dry run)."),
+):
+    """Auto-fill an application form via Playwright (Greenhouse and Lever supported).
+
+    By default runs as a dry run — fills all fields and takes a screenshot
+    but does NOT submit. Review the screenshot in data/screenshots/, then
+    run with --submit when ready.
+
+    Requires a resume at data/base_resume.pdf (or tailored version from tailor command).
+    Cover letter is used automatically if generated for this job.
+
+    Supported ATS: Greenhouse (greenhouse.io), Lever (lever.co)
+    Not supported: Workday, LinkedIn Easy Apply (apply manually for these)
+
+    Examples:
+
+      python main.py apply --job-id 12            # dry run — fill + screenshot
+
+      python main.py apply --job-id 12 --submit   # actually submit
+    """
+    from agents.autofill import run_apply
+    run_apply(job_id=job_id, submit=submit)
 
 
 # ---------------------------------------------------------------------------
@@ -613,9 +767,42 @@ def apply(job_id: int = typer.Option(..., help="Job ID to apply for")):
 # ---------------------------------------------------------------------------
 
 @app.command()
-def outcome(job_id: int = typer.Option(..., help="Job ID to log outcome for")):
-    """Log an interview outcome for a job."""
-    console.print(f"[yellow]Outcome command for job {job_id} — coming in Phase 7.[/yellow]")
+def outcome(
+    job_id: int = typer.Option(..., "--job-id", help="Job ID to log an interview outcome for."),
+):
+    """Log an interview outcome for a job (stage reached, rejection reason, feedback).
+
+    Claude analyzes the feedback and suggests study topics to address the gap.
+    Outcomes are tracked in the database for analytics.
+
+    Example:
+
+      python main.py outcome --job-id 12
+    """
+    from agents.analytics import run_outcome
+    run_outcome(job_id=job_id)
+
+
+# ---------------------------------------------------------------------------
+# analytics
+# ---------------------------------------------------------------------------
+
+@app.command()
+def analytics():
+    """Show application pipeline analytics and Claude pattern analysis.
+
+    Displays:
+      - Pipeline stats (scored, applied, interviews, offers)
+      - Outreach response rates
+      - Outcome breakdown by fit score range
+      - Claude-generated patterns and recommendations (needs 3+ applications)
+
+    Example:
+
+      python main.py analytics
+    """
+    from agents.analytics import run_analytics
+    run_analytics()
 
 
 # ---------------------------------------------------------------------------
@@ -624,11 +811,56 @@ def outcome(job_id: int = typer.Option(..., help="Job ID to log outcome for")):
 
 @app.command()
 def digest():
-    """Show the daily summary dashboard."""
-    console.print("[yellow]Digest command — coming in Phase 7.[/yellow]")
+    """Daily driver command — shows everything you need to act on today.
+
+    Sections:
+      - Pipeline summary (applied / interviewing / offers)
+      - New scored jobs from the last 24 hours
+      - Follow-ups due today
+      - Active hiring surges
+      - Study plan items from your latest prep session
+
+    Example:
+
+      python main.py digest
+    """
+    from agents.digest import run_digest
+    run_digest()
 
 
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# run (orchestrator)
+# ---------------------------------------------------------------------------
+
+@app.command()
+def run(
+    job_id: int = typer.Option(..., "--job-id", help="Job ID to run the full pipeline for. Must be scored first."),
+    apply: bool = typer.Option(False, "--apply", help="Also run autofill dry-run at the end (fills form, no submit)."),
+    level: str = typer.Option("senior", "--level", help="Role level for salary lookup: junior/mid/senior/staff."),
+    force: bool = typer.Option(False, "--force", help="Re-run all steps even if outputs already exist."),
+):
+    """Run the full pipeline for a job in one command.
+
+    Chains: company research → resume tailor → cover letter → interview prep → salary intel.
+    All outputs are cached — re-running is fast if steps already completed.
+
+    Requires the job to be scored first: python main.py score --job-id <id>
+
+    Examples:
+
+      python main.py run --job-id 42                    # full pipeline
+
+      python main.py run --job-id 42 --apply            # also do autofill dry run
+
+      python main.py run --job-id 42 --force            # re-run all steps
+
+      python main.py run --job-id 42 --level staff      # use staff level for salary
+    """
+    from agents.orchestrator import run_pipeline
+    run_pipeline(job_id=job_id, apply=apply, level=level, force=force)
+
 
 if __name__ == "__main__":
     app()

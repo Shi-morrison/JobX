@@ -74,6 +74,74 @@ def _parse_markdown(text: str) -> dict:
     return result
 
 
+def fetch_company_meta(company_name: str) -> dict:
+    """Fetch company metadata from levels.fyi company page.
+
+    Extracts funding stage, estimated valuation, industry, employee count,
+    and a short description from the levels.fyi Next.js page data.
+
+    Returns:
+        {
+            "found": bool,
+            "funding_stage": str,
+            "estimated_valuation": str,
+            "industry": str,
+            "employee_count": str,
+            "description": str,
+            "website": str,
+        }
+    """
+    import json as _json
+    slug = _company_slug(company_name)
+    url = f"https://www.levels.fyi/company/{slug}/"
+
+    base = {
+        "found": False,
+        "funding_stage": "",
+        "estimated_valuation": "",
+        "industry": "",
+        "employee_count": "",
+        "description": "",
+        "website": "",
+    }
+
+    try:
+        resp = requests.get(url, headers=_HEADERS, timeout=12)
+        if resp.status_code != 200:
+            return base
+
+        match = re.search(
+            r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>',
+            resp.text,
+            re.DOTALL,
+        )
+        if not match:
+            return base
+
+        data = _json.loads(match.group(1))
+        company = data.get("props", {}).get("pageProps", {}).get("company", {})
+        if not company:
+            return base
+
+        emp_range = company.get("employee_count_range") or ""
+        emp_count_raw = company.get("emp_count")
+        employee_count = emp_range or (f"{emp_count_raw:,}" if emp_count_raw else "")
+
+        return {
+            "found": True,
+            "funding_stage": company.get("funding_stage") or "",
+            "estimated_valuation": company.get("estimated_valuation") or "",
+            "industry": company.get("industry") or "",
+            "employee_count": employee_count,
+            "description": company.get("short_description") or company.get("description") or "",
+            "website": company.get("website") or "",
+        }
+
+    except Exception as e:
+        console.print(f"[yellow]  levels.fyi company meta failed: {e}[/yellow]")
+        return base
+
+
 def fetch_levelsfyi_compensation(company_name: str) -> dict:
     """Fetch salary / compensation data from levels.fyi for a company.
 

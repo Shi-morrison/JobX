@@ -187,6 +187,105 @@ async def _extract_text(locator, selectors: list[str], min_len: int = 0) -> str:
     return ""
 
 
+async def _scrape_rating(url: str) -> dict:
+    """Scrape overall rating and review count from a Glassdoor company overview page."""
+    from playwright.async_api import async_playwright
+
+    result = {"rating": None, "review_count": None}
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        ctx = await browser.new_context(user_agent=_UA, viewport={"width": 1280, "height": 900})
+        page = await ctx.new_page()
+        try:
+            await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            await page.wait_for_timeout(random.randint(1500, 2500))
+
+            # Dismiss popups
+            for sel in _DISMISS_SELECTORS:
+                try:
+                    btn = page.locator(sel).first
+                    if await btn.is_visible(timeout=800):
+                        await btn.click()
+                        await page.wait_for_timeout(300)
+                except Exception:
+                    pass
+
+            # Rating — Glassdoor shows it prominently as a number like "3.8"
+            for sel in [
+                "[data-test='rating-info'] [data-test='rating']",
+                "[class*='ratingNumber']",
+                "[class*='rating'] [class*='strong']",
+                "[data-test='overall-rating']",
+            ]:
+                try:
+                    el = page.locator(sel).first
+                    if await el.is_visible(timeout=800):
+                        text = (await el.inner_text()).strip()
+                        val = float(text)
+                        if 1.0 <= val <= 5.0:
+                            result["rating"] = val
+                            break
+                except Exception:
+                    pass
+
+            # Review count
+            for sel in ["[data-test='reviewsCount']", "[class*='reviewCount']", "[class*='reviews']"]:
+                try:
+                    el = page.locator(sel).first
+                    if await el.is_visible(timeout=800):
+                        text = (await el.inner_text()).strip()
+                        nums = re.findall(r"[\d,]+", text)
+                        if nums:
+                            result["review_count"] = nums[0].replace(",", "")
+                            break
+                except Exception:
+                    pass
+
+        except Exception:
+            pass
+        finally:
+            await browser.close()
+
+    return result
+
+
+def fetch_glassdoor_rating(company_name: str) -> dict:
+    """Fetch overall Glassdoor rating for a company.
+
+    Returns:
+        {
+            "found": bool,
+            "company_slug": str,
+            "employer_id": str | None,
+            "rating": float | None,   # e.g. 3.8 (out of 5)
+            "review_count": str | None,
+        }
+    """
+    employer_id, slug = _find_employer_id(company_name)
+
+    if employer_id:
+        url = f"{_GLASSDOOR_BASE}/Overview/Working-at-{slug}-EI_IE{employer_id}.htm"
+    else:
+        url = f"{_GLASSDOOR_BASE}/Overview/{slug}.htm"
+
+    base = {
+        "found": False,
+        "company_slug": slug,
+        "employer_id": employer_id,
+        "rating": None,
+        "review_count": None,
+    }
+
+    try:
+        data = asyncio.run(_scrape_rating(url))
+        found = data["rating"] is not None
+        return {**base, **data, "found": found}
+    except Exception as e:
+        console.print(f"[yellow]  Glassdoor rating fetch failed: {e}[/yellow]")
+        return base
+
+
 def fetch_glassdoor_interviews(company_name: str, limit: int = 20) -> dict:
     """Fetch reported interview questions from Glassdoor for a company.
 

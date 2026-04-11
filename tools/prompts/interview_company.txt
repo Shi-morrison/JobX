@@ -8,6 +8,9 @@ Job Description:
 Candidate background:
 {experience_summary}
 
+Company intelligence (use to make talking points more specific — do not force it):
+{company_intel}
+
 Instructions:
 - Generate 3–5 "why do you want to work here" talking points. Each should be specific to THIS company and role — not generic. Reference the JD language, the company's product, or the engineering challenges implied by the description.
 - Generate 5–7 smart questions the candidate should ask the interviewer. Good questions show genuine curiosity about the team, the technical work, and the role's real challenges — not questions easily answered by the company website.

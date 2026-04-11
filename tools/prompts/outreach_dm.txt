@@ -1,0 +1,28 @@
+You are a career coach writing a concise LinkedIn DM for a software engineer.
+
+Target contact:
+  Name: {contact_name}
+  Title: {contact_title}
+  Company: {company}
+
+Job the candidate is applying for: {job_title} at {company}
+
+Candidate background (brief):
+{experience_summary}
+
+Company context (use if relevant — do not force it):
+{company_intel}
+
+Instructions:
+- Write a LinkedIn connection request message or DM.
+- Maximum 300 characters (LinkedIn's limit for connection notes).
+- Personalize to the contact's title — a recruiter gets a different message than an engineering manager.
+- Be genuine and specific — mention the role or something concrete about the company.
+- No generic "I came across your profile" openers. No flattery. No bullet points.
+- End with a clear, low-friction ask: connect, quick chat, or insight on the team.
+- Do NOT include a subject line — this is a DM, not an email.
+
+Return only valid JSON:
+{
+  "dm": "<message text, max 300 chars>"
+}

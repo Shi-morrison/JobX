@@ -68,6 +68,7 @@ class OutreachSequence(Base):
     id = Column(Integer, primary_key=True)
     contact_id = Column(Integer, ForeignKey("contacts.id"), nullable=False)
     message_type = Column(String)     # linkedin / email
+    content = Column(Text)            # generated message text
     sent_at = Column(DateTime)
     follow_up_due = Column(DateTime)
     response_received = Column(Boolean, default=False)
@@ -96,9 +97,12 @@ class CompanyResearch(Base):
     company_name = Column(String, unique=True, nullable=False)
     glassdoor_rating = Column(Float)
     funding_stage = Column(String)
-    recent_news = Column(JSON)        # list of {title, url, date}
-    tech_stack = Column(JSON)         # list of technologies
-    layoff_history = Column(JSON)     # list of {date, count, source}
+    employee_count = Column(String)   # e.g. "1,000–5,000"
+    industry = Column(String)
+    recent_news = Column(JSON)        # list of {title, url, snippet}
+    tech_stack = Column(JSON)         # list of technology names
+    layoff_history = Column(JSON)     # list of {headline, url, date}
+    summary = Column(Text)            # Claude-synthesized 2–3 sentence overview
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

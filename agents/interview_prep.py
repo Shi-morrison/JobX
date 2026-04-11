@@ -197,18 +197,35 @@ def generate_behavioral_questions(job: Job, resume_data: dict) -> dict:
 # Task 3.5.4 — Company-Specific Prep
 # ---------------------------------------------------------------------------
 
-def generate_company_questions(job: Job, resume_data: dict) -> dict:
+def generate_company_questions(job: Job, resume_data: dict, company_research: dict | None = None) -> dict:
     """Generate "why us" talking points and smart questions to ask the interviewer.
 
     Returns:
         Dict with company_questions and why_us_talking_points.
     """
+    # Build company intel from research if available
+    company_intel = "No company research available."
+    if company_research:
+        parts = []
+        if company_research.get("summary"):
+            parts.append(company_research["summary"])
+        if company_research.get("tech_stack"):
+            parts.append(f"Tech stack: {', '.join(company_research['tech_stack'][:10])}")
+        if company_research.get("funding_stage"):
+            parts.append(f"Stage: {company_research['funding_stage']}")
+        if company_research.get("recent_news"):
+            news_lines = [n["title"] for n in company_research["recent_news"][:3]]
+            parts.append("Recent news: " + "; ".join(news_lines))
+        if parts:
+            company_intel = "\n".join(parts)
+
     prompt = load_prompt(
         "interview_company",
         job_title=job.title,
         company=job.company,
         job_description=(job.description or "")[:3000],
         experience_summary=_build_experience_summary(resume_data),
+        company_intel=company_intel,
     )
     client = ClaudeClient()
     return client.chat_json(
@@ -287,6 +304,12 @@ def run_prep(job_id: int, force: bool = False) -> None:
     resume_data = parse_resume()
     gap_analysis = job.gap_analysis or {}
     has_description = bool(job.description and job.description.strip() not in ("", "nan"))
+
+    # Auto-load cached company research if available
+    from agents.company_research import get_cached_research
+    company_research = get_cached_research(job.company)
+    if company_research:
+        console.print(f"[dim]Using cached company research for {job.company}.[/dim]")
 
     if not has_description:
         console.print(
@@ -367,10 +390,10 @@ def run_prep(job_id: int, force: bool = False) -> None:
             console.print(f"[yellow]Warning: behavioral questions failed: {e}[/yellow]")
             behavioral = {"behavioral_questions": []}
 
-    # Step 6: Company-specific questions
+    # Step 6: Company-specific questions (enriched with research if available)
     with console.status("[6/7] Generating company-specific prep..."):
         try:
-            company = generate_company_questions(job, resume_data)
+            company = generate_company_questions(job, resume_data, company_research)
         except Exception as e:
             console.print(f"[yellow]Warning: company questions failed: {e}[/yellow]")
             company = {"company_questions": [], "why_us_talking_points": []}

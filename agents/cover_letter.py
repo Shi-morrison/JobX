@@ -43,6 +43,19 @@ def generate_cover_letter(
         f"- {s['gap']}: {s['suggestion']}" for s in reframe_suggestions
     ) or "None"
 
+    # Build company intel context from research if available
+    company_intel = "No company research available."
+    if company_research:
+        parts = []
+        if company_research.get("summary"):
+            parts.append(company_research["summary"])
+        if company_research.get("funding_stage"):
+            parts.append(f"Stage: {company_research['funding_stage']}")
+        if company_research.get("tech_stack"):
+            parts.append(f"Tech stack: {', '.join(company_research['tech_stack'][:10])}")
+        if parts:
+            company_intel = " | ".join(parts)
+
     prompt = load_prompt(
         "cover_letter",
         job_title=job.title,
@@ -53,6 +66,7 @@ def generate_cover_letter(
         hard_gaps=hard_gaps,
         soft_gaps=soft_gaps,
         reframe_suggestions=reframe_text,
+        company_intel=company_intel,
     )
 
     client = ClaudeClient()
@@ -129,11 +143,17 @@ def run_cover_letter(job_id: int) -> None:
         )
         return
 
+    # Auto-load cached company research if available
+    from agents.company_research import get_cached_research
+    company_research = get_cached_research(job.company)
+    if company_research:
+        console.print(f"[dim]Using cached company research for {job.company}.[/dim]")
+
     console.print(f"[dim]Generating cover letter for {job.title} @ {job.company}...[/dim]")
 
     with console.status("Writing cover letter..."):
         try:
-            result = generate_cover_letter(job, resume_data)
+            result = generate_cover_letter(job, resume_data, company_research=company_research)
         except Exception as e:
             console.print(f"[red]Cover letter generation failed: {e}[/red]")
             return

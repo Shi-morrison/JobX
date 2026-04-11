@@ -1,0 +1,25 @@
+You are helping a software engineer answer a custom application question.
+
+Job: {job_title} at {company}
+
+Question asked by the employer:
+{question}
+
+Candidate background:
+{experience_summary}
+
+Skills: {skills}
+
+Instructions:
+- Answer the question directly and honestly based on the candidate's background.
+- Be specific — reference real experience where possible.
+- Keep it concise: 2-4 sentences for short-answer questions, 1-2 paragraphs for essay questions.
+- Do NOT start with "I am excited to..." or generic openers.
+- If it is a yes/no question, answer yes or no first, then briefly explain.
+- If it is a salary expectation question, respond with a range based on market rate for the role.
+- Match the tone to the question — technical questions get technical answers.
+
+Return only valid JSON:
+{
+  "answer": "<your answer text>"
+}

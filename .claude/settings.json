@@ -25,7 +25,16 @@
       "Bash(.venv/bin/pytest tests/test_glassdoor.py -v)",
       "Bash(.venv/bin/pytest tests/test_levelsfyi.py -v)",
       "Bash(.venv/bin/python main.py parse-resume --help)",
-      "Bash(.venv/bin/playwright install:*)"
+      "Bash(.venv/bin/playwright install:*)",
+      "Bash(.venv/bin/alembic revision:*)",
+      "Bash(.venv/bin/alembic upgrade:*)",
+      "Bash(.venv/bin/pytest tests/test_company_research.py -v)",
+      "Bash(.venv/bin/python -m pytest tests/test_salary_intel.py -v)",
+      "Bash(.venv/bin/python -m pytest --tb=short -q)",
+      "Bash(.venv/bin/python -m pytest tests/test_hiring_signals.py -v)",
+      "Bash(.venv/bin/python -m pytest tests/test_referral_detector.py tests/test_contact_finder.py tests/test_outreach.py -v)",
+      "Bash(.venv/bin/python -m pytest tests/test_autofill.py -v)",
+      "Bash(.venv/bin/python -m pytest tests/test_analytics.py tests/test_autofill.py -v)"
     ]
   }
 }
