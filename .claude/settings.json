@@ -34,7 +34,14 @@
       "Bash(.venv/bin/python -m pytest tests/test_hiring_signals.py -v)",
       "Bash(.venv/bin/python -m pytest tests/test_referral_detector.py tests/test_contact_finder.py tests/test_outreach.py -v)",
       "Bash(.venv/bin/python -m pytest tests/test_autofill.py -v)",
-      "Bash(.venv/bin/python -m pytest tests/test_analytics.py tests/test_autofill.py -v)"
+      "Bash(.venv/bin/python -m pytest tests/test_analytics.py tests/test_autofill.py -v)",
+      "Read(//home/creamshi/**)",
+      "Bash(echo '')",
+      "Bash(echo '# JobX CLI')",
+      "Bash(echo 'alias jobx=\"/home/creamshi/Projects/JobX/.venv/bin/jobx\"')"
+    ],
+    "additionalDirectories": [
+      "/home/creamshi"
     ]
   }
 }

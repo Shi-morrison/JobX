@@ -113,6 +113,24 @@ python main.py db init
 ```bash
 python main.py parse-resume
 ```
+
+**7. (Optional) Add shell aliases so you don't need `python main.py` every time:**
+
+Add these to your `~/.bashrc` or `~/.zshrc`:
+```bash
+alias jobx="/path/to/JobX/.venv/bin/jobx"
+alias jobx-ui="/path/to/JobX/.venv/bin/streamlit run /path/to/JobX/Home.py"
+```
+Then `source ~/.bashrc`. After that:
+```bash
+jobx digest       # instead of: python main.py digest
+jobx-ui           # instead of: streamlit run Home.py
+```
+
+Or install the CLI into the venv directly (already done if you're reading this after setup):
+```bash
+pip install -e .
+```
 Sends your resume to Claude once and caches the result. All scoring, tailoring, and prep reads from this cache. Re-run with `--force` after updating your resume.
 
 ---
@@ -123,16 +141,16 @@ Three commands to find a good job and generate everything for it:
 
 ```bash
 # 1. Find and score jobs
-python main.py search --location remote --level senior
-python main.py score --recent --limit 10
-python main.py jobs                          # pick a job ID
+jobx search --location remote --level senior
+jobx score --recent --limit 10
+jobx jobs                          # pick a job ID
 
 # 2. Run the full pipeline in one shot
-python main.py run --job-id 42
+jobx run --job-id 42
 
 # 3. Review outputs, then apply
-python main.py apply --job-id 42 --submit
-python main.py mark-applied --job-id 42
+jobx apply --job-id 42 --submit
+jobx mark-applied --job-id 42
 ```
 
 `run` chains: company research → resume tailor → cover letter → interview prep → salary intel.
@@ -144,7 +162,7 @@ python main.py mark-applied --job-id 42
 A browser dashboard that calls the same agent functions as the CLI — no API layer, no separate backend.
 
 ```bash
-streamlit run Home.py
+streamlit run Home.py   # or: jobx-ui (if alias is set up)
 # Opens at http://localhost:8501
 ```
 
@@ -581,39 +599,39 @@ You can use the CLI, UI, or mix both — they share the same database.
 
 ```bash
 # Morning: check what needs attention
-python main.py digest
-# or: open http://localhost:8501 (Home page)
+jobx digest
+# or: jobx-ui  (opens browser dashboard)
 
 # Pull fresh listings and score them
-python main.py search
-python main.py score --recent --limit 20
+jobx search
+jobx score --recent --limit 20
 
 # Find a good job and run the full pipeline
-python main.py jobs
-python main.py run --job-id 42
+jobx jobs
+jobx run --job-id 42
 
 # Apply
-python main.py apply --job-id 42          # dry run, review screenshot
-python main.py apply --job-id 42 --submit # submit
-python main.py mark-applied --job-id 42
+jobx apply --job-id 42          # dry run, review screenshot
+jobx apply --job-id 42 --submit # submit
+jobx mark-applied --job-id 42
 
 # Find contacts and send outreach
-python main.py referrals --job-id 42
-python main.py find-contacts --job-id 42  # requires SERPAPI_KEY
-python main.py outreach --job-id 42 --messages
+jobx referrals --job-id 42
+jobx find-contacts --job-id 42  # requires SERPAPI_KEY
+jobx outreach --job-id 42 --messages
 
 # Check hiring surges
-python main.py signals
+jobx signals
 
 # Practice for an interview
-python main.py prep mock --job-id 42
+jobx prep mock --job-id 42
 
 # Follow-ups
-python main.py outreach --due
+jobx outreach --due
 
 # After an interview
-python main.py outcome --job-id 42
-python main.py analytics
+jobx outcome --job-id 42
+jobx analytics
 ```
 
 ---

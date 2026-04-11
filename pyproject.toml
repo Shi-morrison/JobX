@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=42"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jobx"
+version = "0.1.0"
+requires-python = ">=3.10"
+
+[project.scripts]
+jobx = "main:app"
+
+[tool.setuptools]
+py-modules = ["main"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+exclude = [".venv*", "tests*"]
